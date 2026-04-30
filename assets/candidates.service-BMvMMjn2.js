@@ -1,4 +1,4 @@
-import{t as e}from"./index-CEUuC-3d.js";var t=`
+import{t as e}from"./index-D0lYNR56.js";var t=`
   id, status, observations, created_at,
   identification_completed, conversion_completed, faith_completed,
   students ( id, dni, full_name, program, faculty, campus ),
