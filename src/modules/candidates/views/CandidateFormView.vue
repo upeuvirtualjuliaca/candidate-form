@@ -20,6 +20,7 @@ import { generateCandidatePdf, previewCandidatePdf } from '@/modules/candidates/
 import { searchStudents, type Student } from '@/modules/students/services/students.service'
 import { searchPastors, type Pastor } from '@/modules/pastors/services/pastors.service'
 import FieldStatus from '@/modules/candidates/components/FieldStatus.vue'
+import SignaturePad from '@/components/ui/SignaturePad.vue'
 import { getPrincipalActiveSecretary } from '@/modules/secretaries/services/secretaries.service'
 
 const route = useRoute()
@@ -129,8 +130,10 @@ const howStudiedBible = ref('')
 const decisiveFactor = ref('')
 
 // Declaración de fe
-const faithAnswers = ref<Record<string, boolean | null>>({})
+const faithAnswers    = ref<Record<string, boolean | null>>({})
 const consentAccepted = ref(false)
+const signatureData   = ref<string | null>(null)
+const signatureSaved  = ref(false)
 
 // Ceremonia
 const todayStr = new Date().toISOString().slice(0, 10)
@@ -291,6 +294,8 @@ async function loadDetail() {
       faithAnswers.value = data.faith_answers as Record<string, boolean | null>
     }
     consentAccepted.value = data.consent_accepted ?? false
+    signatureData.value   = data.signature_data ?? null
+    if (signatureData.value) signatureSaved.value = true
 
     // Progress
     identificationDone.value = data.identification_completed
@@ -357,8 +362,9 @@ async function save() {
       administrative_meeting_date: administrativeMeetingDate.value || null,
       ceremony_notes: ceremonyNotes.value || null,
       // Fe
-      faith_answers: { ...faithAnswers.value },
+      faith_answers:    { ...faithAnswers.value },
       consent_accepted: consentAccepted.value,
+      signature_data:   signatureData.value,
     }
 
     const result = await saveCandidateForm(id, payload)
@@ -2084,6 +2090,23 @@ function setFaithAnswer(idx: number, val: boolean) {
                     Debes aceptar este consentimiento para poder generar el PDF.
                   </p>
                 </Transition>
+              </div>
+
+              <!-- Firma -->
+              <div class="space-y-3">
+                <div class="flex items-center gap-1.5">
+                  <FieldStatus v-if="savedSnap" :filled="!!signatureData" />
+                  <span class="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    Firma del candidato
+                  </span>
+                  <span v-if="signatureSaved" class="text-[10px] text-emerald-600 font-medium ml-1">
+                    ✓ guardada
+                  </span>
+                </div>
+                <SignaturePad
+                  v-model="signatureData"
+                  @saved="signatureSaved = true"
+                />
               </div>
 
               <!-- Guardar -->

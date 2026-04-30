@@ -86,6 +86,7 @@ export interface CandidateDetail {
   final_declaration:             string | null
   faith_observations:            string | null
   consent_accepted:              boolean
+  signature_data:                string | null
 
   // ── Progreso ────────────────────────────────────────────────
   identification_completed:      boolean
@@ -180,6 +181,7 @@ export interface CandidateFormPayload {
   final_declaration?:          string | null
   faith_observations?:         string | null
   consent_accepted?:           boolean
+  signature_data?:             string | null
 }
 
 export interface CompletionResult {
@@ -234,7 +236,7 @@ export async function getCandidateDetail(id: string): Promise<CandidateDetail> {
       conversion_date, conversion_place, influential_person, spiritual_experience, conversion_observations,
       biblical_instructor_1, biblical_instructor_2, previous_religion,
       how_knew_iasd, how_studied_bible, decisive_factor,
-      commitment_checks, faith_answers, final_declaration, faith_observations, consent_accepted,
+      commitment_checks, faith_answers, final_declaration, faith_observations, consent_accepted, signature_data,
       identification_completed, conversion_completed, faith_completed, ceremony_completed,
       students (
         id, dni, full_name, sex, institutional_email, phone,

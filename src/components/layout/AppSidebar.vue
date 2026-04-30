@@ -84,12 +84,12 @@ const navItems: NavItem[] = [
 
   { id: 'users', name: 'Usuarios', to: '/users', icon: iUsers },
 
-  {
+  /* {
     id: 'admin',
     name: 'Administración',
     icon: iAdmin,
     children: [{ name: 'Gestión', to: '/admin' }],
-  },
+  }, */
 
   {
     id: 'settings',

@@ -973,6 +973,11 @@ function drawFaithSection(ctx: FlowCtx, c: CandidateDetail): void {
   const sigLineY = col4StartY + col4MergedH - sigPad
   const sigX1   = SX + 3 * COL4_W + 3
   const sigX2   = SX + 4 * COL4_W - 3
+  if (c.signature_data) {
+    const imgW = sigX2 - sigX1
+    const imgH = sigLineY - col4StartY - 2
+    ctx.doc.addImage(c.signature_data, 'PNG', sigX1, col4StartY + 1, imgW, imgH)
+  }
   ctx.doc.setDrawColor(0, 0, 0)
   ctx.doc.setLineWidth(0.3)
   ctx.doc.line(sigX1, sigLineY, sigX2, sigLineY)
