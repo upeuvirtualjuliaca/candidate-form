@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #04395a;
+  --color-secondary: #068ab8;
+  --color-tertiary: #fdc710;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  overflow: hidden;
+}
