@@ -7,7 +7,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: '/candidate_registration_form/',
+  base: '/candidate-form/',
   plugins: [
     tailwindcss(),
     vue(),
