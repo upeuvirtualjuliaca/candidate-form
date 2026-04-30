@@ -1,0 +1,1 @@
+import{E as e,S as t,m as n,u as r}from"./runtime-core.esm-bundler-Cb8V-H3B.js";import{t as i}from"./_plugin-vue_export-helper-1r9tKl2A.js";var a={},o={class:`auth-layout`};function s(i,a){let s=e(`RouterView`);return t(),r(`div`,o,[n(s)])}var c=i(a,[[`render`,s]]);export{c as default};
