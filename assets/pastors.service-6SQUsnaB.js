@@ -1,4 +1,4 @@
-import{t as e}from"./index-D0lYNR56.js";function t(e){return{id:e.id,dni:e.dni,full_name:e.full_name,phone:e.phone??null,created_at:e.created_at,programs:(e.pastor_programs??[]).map(e=>({id:e.programs.id,name:e.programs.name,faculty:{id:e.programs.faculties.id,name:e.programs.faculties.name}}))}}var n=`
+import{t as e}from"./index-BL6y0pvQ.js";function t(e){return{id:e.id,dni:e.dni,full_name:e.full_name,phone:e.phone??null,created_at:e.created_at,programs:(e.pastor_programs??[]).map(e=>({id:e.programs.id,name:e.programs.name,faculty:{id:e.programs.faculties.id,name:e.programs.faculties.name}}))}}var n=`
   id, dni, full_name, phone, created_at,
   pastor_programs (
     programs (
