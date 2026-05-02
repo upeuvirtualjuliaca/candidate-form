@@ -1,9 +1,9 @@
-import{t as e}from"./index-BL6y0pvQ.js";var t=`
+import{t as e}from"./index-BowrUqut.js";var t=`
   id, status, observations, created_at,
   identification_completed, conversion_completed, faith_completed,
   students ( id, dni, full_name, program, faculty, campus ),
   teachers ( id, dni, full_name, faculty, main_ep, campus )
-`;async function n(n=1,r=10,i){let a=(n-1)*r,o=a+r-1,s=e.from(`candidates`).select(t,{count:`exact`}).order(`created_at`,{ascending:!1}).range(a,o);i&&(s=s.eq(`status`,i));let{data:c,count:l,error:u}=await s;if(u)throw u;return{data:c??[],count:l??0}}async function r(t){let{data:n,error:r}=await e.from(`candidates`).select(`
+`;async function n(n=1,r=10,i,a){let o=(n-1)*r,s=o+r-1,c=e.from(`candidates`).select(t,{count:`exact`}).order(`created_at`,{ascending:!1}).range(o,s);if(i&&(c=c.eq(`status`,i)),a?.trim()){let e=`%${a.trim()}%`;c=c.or(`students.full_name.ilike.${e},students.dni.ilike.${e},teachers.full_name.ilike.${e},teachers.dni.ilike.${e}`)}let{data:l,count:u,error:d}=await c;if(d)throw d;return{data:l??[],count:u??0}}async function r(t){let{data:n,error:r}=await e.from(`candidates`).select(`
       id, student_id, teacher_id, created_by, status, created_at,
       observations, ceremony_type, address, education_level, education_level_other,
       marital_status, wedding_date, has_disability, disability_types,
