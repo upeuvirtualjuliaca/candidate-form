@@ -1,4 +1,4 @@
-import{t as e}from"./index-BowrUqut.js";var t=`
+import{t as e}from"./index-CWR_IhxD.js";var t=`
   id, status, observations, created_at,
   identification_completed, conversion_completed, faith_completed,
   students ( id, dni, full_name, program, faculty, campus ),
