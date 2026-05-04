@@ -1,1 +1,0 @@
-var e=`/candidate-form/assets/siloe-Bj1SqGLd.png`;export{e as t};
