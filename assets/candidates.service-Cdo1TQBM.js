@@ -1,4 +1,4 @@
-import{t as e}from"./supabase-9qDArUMP.js";var t=`
+import{t as e}from"./supabase-DRfWkGhl.js";var t=`
   id, status, observations, created_at,
   identification_completed, conversion_completed, faith_completed, ceremony_data_completed,
   students ( id, dni, full_name, program, faculty, campus ),
