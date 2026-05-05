@@ -3,15 +3,16 @@ import { supabase } from '@/core/supabase'
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface Student {
-  id:         string
-  dni:        string
-  full_name:  string
-  program:    string | null
-  faculty:    string | null
-  campus:     string | null
-  cycle:      string | null
-  phone:      string | null
-  birth_date: string | null
+  id:           string
+  dni:          string
+  student_code: string | null
+  full_name:    string
+  program:      string | null
+  faculty:      string | null
+  campus:       string | null
+  cycle:        string | null
+  phone:        string | null
+  birth_date:   string | null
 }
 
 export interface StudentDetail {
@@ -43,7 +44,7 @@ export interface PaginatedStudents {
 
 // ── Queries ────────────────────────────────────────────────────────────────
 
-const LIST_FIELDS = 'id, dni, full_name, program, faculty, campus, cycle, phone, birth_date'
+const LIST_FIELDS = 'id, dni, student_code, full_name, program, faculty, campus, cycle, phone, birth_date'
 
 export async function getStudentsPaginated(
   page:     number = 1,
@@ -84,8 +85,9 @@ export async function getLibrePaginated(
 export async function searchStudents(params: {
   dni?:  string
   name?: string
+  code?: string   // busca por student_code O dni al mismo tiempo
 }): Promise<Student[]> {
-  if (!params.dni?.trim() && !params.name?.trim()) return []
+  if (!params.dni?.trim() && !params.name?.trim() && !params.code?.trim()) return []
 
   let query = supabase
     .from('students')
@@ -94,7 +96,10 @@ export async function searchStudents(params: {
     .order('full_name', { ascending: true })
     .limit(50)
 
-  if (params.dni?.trim()) {
+  if (params.code?.trim()) {
+    const val = params.code.trim()
+    query = query.or(`student_code.eq.${val},dni.eq.${val}`)
+  } else if (params.dni?.trim()) {
     query = query.eq('dni', params.dni.trim())
   } else if (params.name?.trim()) {
     query = query.ilike('full_name', `%${params.name.trim()}%`)
@@ -108,8 +113,9 @@ export async function searchStudents(params: {
 export async function searchLibre(params: {
   dni?:  string
   name?: string
+  code?: string   // busca por student_code O dni al mismo tiempo
 }): Promise<Student[]> {
-  if (!params.dni?.trim() && !params.name?.trim()) return []
+  if (!params.dni?.trim() && !params.name?.trim() && !params.code?.trim()) return []
 
   let query = supabase
     .from('students')
@@ -118,7 +124,10 @@ export async function searchLibre(params: {
     .order('full_name', { ascending: true })
     .limit(50)
 
-  if (params.dni?.trim()) {
+  if (params.code?.trim()) {
+    const val = params.code.trim()
+    query = query.or(`student_code.eq.${val},dni.eq.${val}`)
+  } else if (params.dni?.trim()) {
     query = query.eq('dni', params.dni.trim())
   } else if (params.name?.trim()) {
     query = query.ilike('full_name', `%${params.name.trim()}%`)

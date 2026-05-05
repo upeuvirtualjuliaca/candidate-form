@@ -90,6 +90,7 @@ function onTouchStart(e: TouchEvent) {
   e.preventDefault()
   if (!ctx) return
   const touch = e.touches[0]
+  if (!touch) return
   isDrawing.value = true
   const { x, y } = getPos(touch)
   lastX = x; lastY = y
@@ -101,6 +102,7 @@ function onTouchMove(e: TouchEvent) {
   e.preventDefault()
   if (!isDrawing.value || !ctx) return
   const touch = e.touches[0]
+  if (!touch) return
   const { x, y } = getPos(touch)
   ctx.lineTo(x, y)
   ctx.stroke()

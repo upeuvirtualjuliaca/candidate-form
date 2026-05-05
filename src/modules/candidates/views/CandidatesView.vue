@@ -2,6 +2,7 @@
 import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useToastStore } from '@/stores/toast'
+import { usePermissions } from '@/composables/usePermissions'
 import Tabs, { type Tab } from '@/components/ui/Tabs.vue'
 import {
   getCandidates,
@@ -17,6 +18,7 @@ import {
 
 const router = useRouter()
 const toast = useToastStore()
+const { canWrite } = usePermissions()
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
@@ -44,19 +46,22 @@ const listRows = ref<CandidateRow[]>([])
 const listTotal = ref(0)
 const listPage = ref(1)
 const listPageSize = ref(10)
+const listSearch = ref('')
 const listDeleteId = ref<string | null>(null)
 const listDeleting = ref(false)
 
 async function loadList() {
   listLoading.value = true
   try {
-    const res = await getCandidates(listPage.value, listPageSize.value)
+    const res = await getCandidates(listPage.value, listPageSize.value, undefined, listSearch.value)
     listRows.value = res.data
     listTotal.value = res.count
   } finally {
     listLoading.value = false
   }
 }
+
+watch(listSearch, () => { listPage.value = 1; loadList() })
 
 const listTotalPages = () => Math.max(1, Math.ceil(listTotal.value / listPageSize.value))
 
@@ -81,7 +86,7 @@ async function executeDelete() {
   try {
     await deleteCandidate(listDeleteId.value)
     listDeleteId.value = null
-    await loadList()
+    await Promise.all([loadList(), loadDrafts()])
   } finally {
     listDeleting.value = false
   }
@@ -97,11 +102,12 @@ const draftsRows = ref<CandidateRow[]>([])
 const draftsTotal = ref(0)
 const draftsPage = ref(1)
 const draftsPageSize = ref(10)
+const draftsSearch = ref('')
 
 async function loadDrafts() {
   draftsLoading.value = true
   try {
-    const res = await getCandidates(draftsPage.value, draftsPageSize.value, 'draft')
+    const res = await getCandidates(draftsPage.value, draftsPageSize.value, 'draft', draftsSearch.value)
     draftsRows.value = res.data
     draftsTotal.value = res.count
   } finally {
@@ -110,6 +116,7 @@ async function loadDrafts() {
 }
 
 watch([draftsPage, draftsPageSize], loadDrafts)
+watch(draftsSearch, () => { draftsPage.value = 1; loadDrafts() })
 
 // ── Completed tab ──────────────────────────────────────────────────────────
 
@@ -118,11 +125,12 @@ const completedRows = ref<CandidateRow[]>([])
 const completedTotal = ref(0)
 const completedPage = ref(1)
 const completedPageSize = ref(10)
+const completedSearch = ref('')
 
 async function loadCompleted() {
   completedLoading.value = true
   try {
-    const res = await getCandidates(completedPage.value, completedPageSize.value, 'completed')
+    const res = await getCandidates(completedPage.value, completedPageSize.value, 'completed', completedSearch.value)
     completedRows.value = res.data
     completedTotal.value = res.count
   } finally {
@@ -131,6 +139,7 @@ async function loadCompleted() {
 }
 
 watch([completedPage, completedPageSize], loadCompleted)
+watch(completedSearch, () => { completedPage.value = 1; loadCompleted() })
 
 // Load filtered tabs on first switch
 watch(activeTab, (tab) => {
@@ -258,6 +267,24 @@ watch(activeTab, (tab) => {
       <div class="px-6 pb-6">
         <!-- ══ LISTADO ══════════════════════════════════════════════════════ -->
         <div v-show="activeTab === 'list'" class="pt-2">
+          <!-- Search -->
+          <div class="relative mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+              stroke-width="1.5" stroke="#9ca3af"
+              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            </svg>
+            <input v-model="listSearch" type="text" placeholder="Buscar por nombre, DNI o código…"
+              class="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40 placeholder:text-gray-400" />
+            <button v-if="listSearch" @click="listSearch = ''"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <!-- Skeleton -->
           <template v-if="listLoading">
             <div
@@ -309,11 +336,11 @@ watch(activeTab, (tab) => {
                     class="text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100"
                   >
                     <th class="text-left py-2 pr-4 font-semibold">Nombre</th>
-                    <th class="text-left py-2 pr-4 font-semibold">DNI</th>
                     <th class="text-left py-2 pr-4 font-semibold">Estado</th>
                     <th class="text-center py-2 pr-3 font-semibold">Identificación</th>
                     <th class="text-center py-2 pr-3 font-semibold">Conversión</th>
-                    <th class="text-center py-2 pr-4 font-semibold">Declaración</th>
+                    <th class="text-center py-2 pr-3 font-semibold">Declaración</th>
+                    <th class="text-center py-2 pr-4 font-semibold">Ceremonia</th>
                     <th class="py-2"></th>
                   </tr>
                 </thead>
@@ -323,11 +350,9 @@ watch(activeTab, (tab) => {
                     :key="row.id"
                     class="hover:bg-gray-50 transition-colors group"
                   >
-                    <td class="py-3 pr-4 font-medium text-gray-800">
-                      {{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}
-                    </td>
-                    <td class="py-3 pr-4 text-gray-500 font-mono text-xs">
-                      {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                    <td class="py-3 pr-4">
+                      <p class="font-medium text-gray-800">{{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}</p>
+                      <p class="text-xs text-gray-400 font-mono mt-0.5">{{ row.students?.dni ?? row.teachers?.dni ?? '—' }}</p>
                     </td>
                     <td class="py-3 pr-4">
                       <span
@@ -423,44 +448,29 @@ watch(activeTab, (tab) => {
                         </svg>
                       </span>
                     </td>
+                    <td class="py-3 pr-3 text-center">
+                      <span
+                        class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs"
+                        :class="row.faith_completed ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'"
+                      >
+                        <svg v-if="row.faith_completed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3 h-3">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        </svg>
+                        <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                      </span>
+                    </td>
                     <td class="py-3 pr-4 text-center">
                       <span
                         class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs"
-                        :class="
-                          row.faith_completed
-                            ? 'bg-emerald-100 text-emerald-600'
-                            : 'bg-gray-100 text-gray-400'
-                        "
+                        :class="row.ceremony_data_completed ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'"
                       >
-                        <svg
-                          v-if="row.faith_completed"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke-width="2.5"
-                          stroke="currentColor"
-                          class="w-3 h-3"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="m4.5 12.75 6 6 9-13.5"
-                          />
+                        <svg v-if="row.ceremony_data_completed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3 h-3">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                         </svg>
-                        <svg
-                          v-else
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke-width="2"
-                          stroke="currentColor"
-                          class="w-3 h-3"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M6 18 18 6M6 6l12 12"
-                          />
+                        <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                         </svg>
                       </span>
                     </td>
@@ -472,7 +482,7 @@ watch(activeTab, (tab) => {
                           >Ver ficha</RouterLink
                         >
                         <button
-                          v-if="row.status !== 'completed'"
+                          v-if="canWrite && row.status !== 'completed'"
                           type="button"
                           @click="confirmDelete(row.id)"
                           class="px-3 py-1 rounded-lg text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
@@ -514,6 +524,7 @@ watch(activeTab, (tab) => {
                       { label: 'ID', done: row.identification_completed },
                       { label: 'Conv', done: row.conversion_completed },
                       { label: 'Fe', done: row.faith_completed },
+                      { label: 'Cer', done: row.ceremony_data_completed },
                     ]"
                     :key="i"
                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
@@ -546,7 +557,7 @@ watch(activeTab, (tab) => {
                     >Ver ficha</RouterLink
                   >
                   <button
-                    v-if="row.status !== 'completed'"
+                    v-if="canWrite && row.status !== 'completed'"
                     type="button"
                     @click="confirmDelete(row.id)"
                     class="flex-1 py-1.5 rounded-lg text-xs font-medium text-red-600 bg-red-50"
@@ -866,6 +877,24 @@ watch(activeTab, (tab) => {
 
         <!-- ══ BORRADORES ════════════════════════════════════════════════════ -->
         <div v-show="activeTab === 'drafts'" class="pt-2">
+          <!-- Search -->
+          <div class="relative mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+              stroke-width="1.5" stroke="#9ca3af"
+              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            </svg>
+            <input v-model="draftsSearch" type="text" placeholder="Buscar por nombre, DNI o código…"
+              class="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40 placeholder:text-gray-400" />
+            <button v-if="draftsSearch" @click="draftsSearch = ''"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <template v-if="draftsLoading">
             <div
               v-for="i in 4"
@@ -903,7 +932,6 @@ watch(activeTab, (tab) => {
                     class="text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100"
                   >
                     <th class="text-left py-2 pr-4 font-semibold">Estudiante</th>
-                    <th class="text-left py-2 pr-4 font-semibold">DNI</th>
                     <th class="text-left py-2 pr-4 font-semibold">Programa</th>
                     <th class="text-left py-2 pr-4 font-semibold">Creado</th>
                     <th class="py-2"></th>
@@ -915,11 +943,9 @@ watch(activeTab, (tab) => {
                     :key="row.id"
                     class="hover:bg-gray-50 transition-colors group"
                   >
-                    <td class="py-3 pr-4 font-medium text-gray-800">
-                      {{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}
-                    </td>
-                    <td class="py-3 pr-4 text-gray-500 font-mono text-xs">
-                      {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                    <td class="py-3 pr-4">
+                      <p class="font-medium text-gray-800">{{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}</p>
+                      <p class="text-xs text-gray-400 font-mono mt-0.5">{{ row.students?.dni ?? row.teachers?.dni ?? '—' }}</p>
                     </td>
                     <td class="py-3 pr-4 text-gray-500 text-xs">
                       {{ row.students?.program ?? row.teachers?.main_ep ?? '—' }}
@@ -935,6 +961,7 @@ watch(activeTab, (tab) => {
                           >Ver ficha</RouterLink
                         >
                         <button
+                          v-if="canWrite"
                           type="button"
                           @click="confirmDelete(row.id)"
                           class="px-3 py-1 rounded-lg text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
@@ -967,6 +994,7 @@ watch(activeTab, (tab) => {
                     >Ver ficha</RouterLink
                   >
                   <button
+                    v-if="canWrite"
                     type="button"
                     @click="confirmDelete(row.id)"
                     class="flex-1 py-1.5 rounded-lg text-xs font-medium text-red-600 bg-red-50"
@@ -1005,6 +1033,24 @@ watch(activeTab, (tab) => {
 
         <!-- ══ COMPLETADOS ════════════════════════════════════════════════════ -->
         <div v-show="activeTab === 'completed'" class="pt-2">
+          <!-- Search -->
+          <div class="relative mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+              stroke-width="1.5" stroke="#9ca3af"
+              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            </svg>
+            <input v-model="completedSearch" type="text" placeholder="Buscar por nombre, DNI o código…"
+              class="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40 placeholder:text-gray-400" />
+            <button v-if="completedSearch" @click="completedSearch = ''"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <template v-if="completedLoading">
             <div
               v-for="i in 4"
@@ -1040,7 +1086,6 @@ watch(activeTab, (tab) => {
                     class="text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100"
                   >
                     <th class="text-left py-2 pr-4 font-semibold">Estudiante</th>
-                    <th class="text-left py-2 pr-4 font-semibold">DNI</th>
                     <th class="text-left py-2 pr-4 font-semibold">Programa</th>
                     <th class="text-left py-2 pr-4 font-semibold">Completado</th>
                     <th class="py-2"></th>
@@ -1052,11 +1097,9 @@ watch(activeTab, (tab) => {
                     :key="row.id"
                     class="hover:bg-gray-50 transition-colors group"
                   >
-                    <td class="py-3 pr-4 font-medium text-gray-800">
-                      {{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}
-                    </td>
-                    <td class="py-3 pr-4 text-gray-500 font-mono text-xs">
-                      {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                    <td class="py-3 pr-4">
+                      <p class="font-medium text-gray-800">{{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}</p>
+                      <p class="text-xs text-gray-400 font-mono mt-0.5">{{ row.students?.dni ?? row.teachers?.dni ?? '—' }}</p>
                     </td>
                     <td class="py-3 pr-4 text-gray-500 text-xs">
                       {{ row.students?.program ?? row.teachers?.main_ep ?? '—' }}

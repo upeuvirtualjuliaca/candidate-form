@@ -799,7 +799,7 @@ function drawFaithSection(ctx: FlowCtx, c: CandidateDetail): void {
   const colW = cw / 2 // 91
   const ROWS = 7
   // Altura individual de cada fila (índice 0 = fila 1)
-  const rowHeights = [6, 8, 9, 9, 6, 6, 12] // mm
+  const rowHeights: number[] = [6, 8, 9, 9, 6, 6, 12] // mm
 
   // Posición Y acumulada de cada fila
   const rowY = (row: number): number => rowHeights.slice(0, row).reduce((s, h) => s + h, 0)
@@ -831,21 +831,21 @@ function drawFaithSection(ctx: FlowCtx, c: CandidateDetail): void {
   // ── Col 2: 7 filas — filas Q7,Q9,Q11,Q13 (índices 0,2,4,6) con fondo gris ──
   for (let row = 0; row < ROWS; row++) {
     ctx.doc.setFillColor(row % 2 === 0 ? '#f1f2f2' : '#ffffff')
-    ctx.doc.rect(cx + colW, gridStartY + rowY(row), colW, rowHeights[row], 'FD')
+    ctx.doc.rect(cx + colW, gridStartY + rowY(row), colW, rowHeights[row]!, 'FD')
   }
 
   // ── Col 1: filas 1,3,5,6 con fondo gris; filas 2,4,7 en blanco ──
   const col1Fills = ['#f1f2f2', '#ffffff', '#f1f2f2', '#ffffff']
   for (let row = 0; row < 4; row++) {
     ctx.doc.setFillColor(col1Fills[row]!)
-    ctx.doc.rect(cx, gridStartY + rowY(row), colW, rowHeights[row], 'FD')
+    ctx.doc.rect(cx, gridStartY + rowY(row), colW, rowHeights[row]!, 'FD')
   }
   // Celda combinada filas 5-6: gris
   ctx.doc.setFillColor('#f1f2f2')
-  ctx.doc.rect(cx, gridStartY + rowY(4), colW, rowHeights[4] + rowHeights[5], 'FD')
+  ctx.doc.rect(cx, gridStartY + rowY(4), colW, rowHeights[4]! + rowHeights[5]!, 'FD')
   // Fila 7: blanco
   ctx.doc.setFillColor('#ffffff')
-  ctx.doc.rect(cx, gridStartY + rowY(6), colW, rowHeights[6], 'FD')
+  ctx.doc.rect(cx, gridStartY + rowY(6), colW, rowHeights[6]!, 'FD')
 
   // Helper: checkboxes + texto centrados verticalmente en una celda
   const drawRow = (qIdx: number, colX: number, ry: number, cellH: number) => {
@@ -868,15 +868,15 @@ function drawFaithSection(ctx: FlowCtx, c: CandidateDetail): void {
   }
 
   // ── Columna 1 ──────────────────────────────────────────────────────────────
-  for (let row = 0; row < 4; row++) drawRow(row, cx, gridStartY + rowY(row), rowHeights[row])
+  for (let row = 0; row < 4; row++) drawRow(row, cx, gridStartY + rowY(row), rowHeights[row]!)
   // Q5 en celda combinada filas 5-6
-  drawRow(4, cx, gridStartY + rowY(4), rowHeights[4] + rowHeights[5])
+  drawRow(4, cx, gridStartY + rowY(4), rowHeights[4]! + rowHeights[5]!)
   // Q6 en fila 7
-  drawRow(5, cx, gridStartY + rowY(6), rowHeights[6])
+  drawRow(5, cx, gridStartY + rowY(6), rowHeights[6]!)
 
   // ── Columna 2: Q7–Q13 (índices 6–12) ──────────────────────────────────────
   for (let row = 0; row < ROWS; row++)
-    drawRow(row + 6, cx + colW, gridStartY + rowY(row), rowHeights[row])
+    drawRow(row + 6, cx + colW, gridStartY + rowY(row), rowHeights[row]!)
 
   ctx.y = gridStartY + totalH
 

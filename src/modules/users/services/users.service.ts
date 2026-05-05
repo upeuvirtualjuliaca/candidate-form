@@ -113,27 +113,36 @@ export async function getUsersList(): Promise<AppUser[]> {
 }
 
 export async function updateUserRole(id: string, role: UserRole): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('user_profiles')
     .update({ role })
     .eq('id', id)
+    .select('id')
   if (error) throw error
+  if (!data || data.length === 0) throw new Error('Sin permiso para cambiar el rol. Verifica las políticas RLS.')
 }
 
 export async function toggleUserActive(id: string, is_active: boolean): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('user_profiles')
     .update({ is_active })
     .eq('id', id)
+    .select('id')
   if (error) throw error
+  if (!data || data.length === 0) throw new Error('Sin permiso para modificar este usuario.')
 }
 
 export async function updateUserProfile(id: string, full_name: string, role: UserRole): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('user_profiles')
     .update({ full_name, role })
     .eq('id', id)
+    .select('id')
   if (error) throw error
+  // Si data está vacío, RLS bloqueó la actualización silenciosamente → informar
+  if (!data || data.length === 0) {
+    throw new Error('Sin permiso para actualizar este perfil. Verifica las políticas RLS de la tabla user_profiles.')
+  }
 }
 
 export async function updateUserPassword(id: string, password: string): Promise<void> {
@@ -155,25 +164,54 @@ export async function inviteUser(payload: InvitePayload): Promise<AppUser> {
     password: payload.dni.trim(),
     options:  { data: { full_name: payload.full_name.trim() || null, role: payload.role } },
   })
-  if (signUpError) throw new Error(signUpError.message)
-  if (!auth.user)  throw new Error('No se pudo crear el usuario.')
 
-  // Confirmar email inmediatamente (sin necesidad de clic en ningún enlace)
-  await supabase.rpc('confirm_user_email', { p_user_id: auth.user.id })
+  if (signUpError) {
+    const msg = signUpError.message.toLowerCase()
+    if (msg.includes('rate limit') || msg.includes('email')) {
+      throw new Error(
+        'Límite de emails de Supabase superado. ' +
+        'Ve al dashboard de Supabase → Authentication → Settings ' +
+        'y desactiva "Confirm email" para poder crear usuarios sin restricciones.',
+      )
+    }
+    throw new Error(signUpError.message)
+  }
+  if (!auth.user) throw new Error('No se pudo crear el usuario.')
 
-  // Upsert perfil
-  const { data, error } = await supabase
+  // Confirmar email vía RPC si existe (permite crear usuarios aunque "Confirm email" esté activo)
+  try {
+    await supabase.rpc('confirm_user_email', { p_user_id: auth.user.id })
+  } catch { /* RPC opcional — no bloquear si no existe */ }
+
+  const profilePayload = {
+    id:        auth.user.id,
+    email:     payload.email.trim().toLowerCase(),
+    full_name: payload.full_name.trim() || null,
+    role:      payload.role,
+    is_active: true,
+  }
+
+  // Si signUp devolvió sesión (email confirmation desactivado) usar tmp (el usuario escribe su propio perfil)
+  // Si no (email confirmation activo y RPC no existe), intentar con el cliente admin
+  const writer = auth.session ? tmp : supabase
+
+  const { data, error } = await writer
     .from('user_profiles')
-    .upsert({
-      id:        auth.user.id,
-      email:     payload.email.trim().toLowerCase(),
-      full_name: payload.full_name.trim() || null,
-      role:      payload.role,
-      is_active: true,
-    })
+    .upsert(profilePayload)
     .select('id, email, full_name, role, is_active, created_at')
     .single()
-  if (error) throw new Error(error.message)
+
+  if (error) {
+    // Fallback: si el writer propio no pudo, intentar con admin
+    const { data: adminData, error: adminError } = await supabase
+      .from('user_profiles')
+      .upsert(profilePayload)
+      .select('id, email, full_name, role, is_active, created_at')
+      .single()
+    if (adminError) throw new Error(adminError.message)
+    return adminData as AppUser
+  }
+
   return data as AppUser
 }
 

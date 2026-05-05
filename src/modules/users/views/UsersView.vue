@@ -175,7 +175,9 @@ async function handleToggleActive(user: AppUser) {
   try {
     await toggleUserActive(user.id, !user.is_active)
     user.is_active = !user.is_active
-  } catch { /* silent */ } finally {
+  } catch (err) {
+    loadError.value = err instanceof Error ? err.message : 'No se pudo cambiar el estado.'
+  } finally {
     togglingId.value = null
   }
 }
@@ -596,7 +598,13 @@ function formatDate(iso: string): string {
               </div>
               <p class="text-xs text-gray-400 mt-2">{{ ROLES.find(r => r.key === invRole)?.description }}</p>
             </div>
-            <p v-if="invError" class="text-xs text-red-600 font-medium">{{ invError }}</p>
+            <div v-if="invError" class="rounded-xl border p-3 space-y-1"
+              :class="invError.includes('dashboard') ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'">
+              <p class="text-xs font-semibold" :class="invError.includes('dashboard') ? 'text-amber-800' : 'text-red-700'">
+                {{ invError.includes('dashboard') ? '⚙️ Configuración requerida en Supabase' : 'Error al crear usuario' }}
+              </p>
+              <p class="text-xs" :class="invError.includes('dashboard') ? 'text-amber-700' : 'text-red-600'">{{ invError }}</p>
+            </div>
           </div>
           <!-- Footer -->
           <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">

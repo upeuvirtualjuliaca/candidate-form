@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { usePermissions } from '@/composables/usePermissions'
 import Tabs, { type Tab } from '@/components/ui/Tabs.vue'
 import {
   getCandidateDetail,
@@ -26,6 +27,7 @@ import { getPrincipalActiveSecretary } from '@/modules/secretaries/services/secr
 const route = useRoute()
 const router = useRouter()
 const id = route.params['id'] as string
+const { canWrite } = usePermissions()
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
@@ -76,24 +78,25 @@ const person = computed(() => {
   const c = candidate.value
   if (!c) return null
   if (c.students) return c.students
-  if (c.teachers) return {
-    id:                  c.teachers.id,
-    dni:                 c.teachers.dni,
-    full_name:           c.teachers.full_name,
-    sex:                 null as string | null,
-    institutional_email: null as string | null,
-    phone:               null as string | null,
-    program:             c.teachers.main_ep,
-    faculty:             c.teachers.faculty,
-    campus:              c.teachers.campus,
-    modality:            c.teachers.dedication_regime,
-    cycle:               c.teachers.condition,
-    group:               c.teachers.academic_degree,
-    country:             null as string | null,
-    postal_code:         null as string | null,
-    birth_date:          null as string | null,
-    religion:            null as string | null,
-  }
+  if (c.teachers)
+    return {
+      id: c.teachers.id,
+      dni: c.teachers.dni,
+      full_name: c.teachers.full_name,
+      sex: null as string | null,
+      institutional_email: null as string | null,
+      phone: null as string | null,
+      program: c.teachers.main_ep,
+      faculty: c.teachers.faculty,
+      campus: c.teachers.campus,
+      modality: c.teachers.dedication_regime,
+      cycle: c.teachers.condition,
+      group: c.teachers.academic_degree,
+      country: null as string | null,
+      postal_code: null as string | null,
+      birth_date: null as string | null,
+      religion: null as string | null,
+    }
   return null
 })
 
@@ -125,15 +128,17 @@ const biblicalInstructor2 = ref('')
 const showInstructor2 = ref(false)
 const previousReligion = ref('')
 const previousReligionOther = ref('')
-const howKnewIasd = ref('')
-const howStudiedBible = ref('')
-const decisiveFactor = ref('')
+const howKnewIasd = ref('Educación Adventista')
+const howStudiedBible = ref('Clase Bíblica Educación')
+const decisiveFactor = ref('Educación Adventista')
 
 // Declaración de fe
-const faithAnswers    = ref<Record<string, boolean | null>>({})
-const consentAccepted = ref(false)
-const signatureData   = ref<string | null>(null)
-const signatureSaved  = ref(false)
+const faithAnswers = ref<Record<string, boolean | null>>(
+  Object.fromEntries(Array.from({ length: 13 }, (_, i) => [String(i), true])),
+)
+const consentAccepted = ref(true)
+const signatureData = ref<string | null>(null)
+const signatureSaved = ref(false)
 
 // Ceremonia
 const todayStr = new Date().toISOString().slice(0, 10)
@@ -143,7 +148,7 @@ const officatingPastor = ref('')
 const officatingPastorDni = ref('')
 const receivingChurch = ref('Fernando Stahl')
 const churchCity = ref('Juliaca - San Román')
-const administrativeMeetingDate = ref('')
+const administrativeMeetingDate = ref(new Date().toISOString().slice(0, 10))
 const ceremonyNotes = ref('')
 const churchSecretary = ref('')
 
@@ -197,6 +202,17 @@ function clearPastorSelection() {
   pastorSuggestions.value = []
 }
 
+function removeGuardian2() {
+  showGuardian2.value = false
+  guardian2Name.value = ''
+  guardian2Document.value = ''
+}
+
+function removeInstructor2() {
+  showInstructor2.value = false
+  biblicalInstructor2.value = ''
+}
+
 function closePastorDropDelayed() {
   setTimeout(() => {
     showPastorDrop.value = false
@@ -213,6 +229,10 @@ const identificationDone = ref(false)
 const conversionDone = ref(false)
 const faithDone = ref(false)
 const ceremonyDone = ref(false)
+const showFaithQuestions = ref(false)
+const showHowKnewIasd = ref(false)
+const showHowStudiedBible = ref(false)
+const showDecisiveFactor = ref(false)
 const status = ref<CandidateStatus>('draft')
 
 const progressPct = computed(() => {
@@ -254,25 +274,27 @@ async function loadDetail() {
     biblicalInstructor1.value = data.biblical_instructor_1 ?? ''
     biblicalInstructor2.value = data.biblical_instructor_2 ?? ''
     showInstructor2.value = !!data.biblical_instructor_2
-    const savedReligion = data.previous_religion ?? data.students?.religion ?? data.teachers?.condition ?? ''
+    const savedReligion =
+      data.previous_religion ?? data.students?.religion ?? data.teachers?.condition ?? ''
     if (savedReligion && !RELIGION_OPTIONS.slice(0, -1).includes(savedReligion)) {
       previousReligion.value = 'Otra'
       previousReligionOther.value = savedReligion
     } else {
       previousReligion.value = savedReligion
     }
-    howKnewIasd.value = data.how_knew_iasd ?? ''
-    howStudiedBible.value = data.how_studied_bible ?? ''
-    decisiveFactor.value = data.decisive_factor ?? ''
+    howKnewIasd.value = data.how_knew_iasd ?? 'Educación Adventista'
+    howStudiedBible.value = data.how_studied_bible ?? 'Clase Bíblica Educación'
+    decisiveFactor.value = data.decisive_factor ?? 'Educación Adventista'
 
     // Ceremonia
     ceremonyDate.value = data.ceremony_date?.slice(0, 10) ?? todayStr
-    ceremonyPlace.value = data.ceremony_place ?? 'Fernando Stahl'
+    ceremonyPlace.value = data.ceremony_place ?? 'Aud. Fernando Stahl'
     officatingPastor.value = data.officiating_pastor ?? ''
     officatingPastorDni.value = data.officiating_pastor_dni ?? ''
-    receivingChurch.value = data.receiving_church ?? 'Fernando Stahl'
-    churchCity.value = data.church_city ?? 'Juliaca - San Román'
-    administrativeMeetingDate.value = data.administrative_meeting_date?.slice(0, 10) ?? ''
+    receivingChurch.value = data.receiving_church ?? 'Villa Chullunquiani - UPeU'
+    churchCity.value = data.church_city ?? 'Juliaca - San Román (Puno)'
+    administrativeMeetingDate.value =
+      data.administrative_meeting_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
     ceremonyNotes.value = data.ceremony_notes ?? ''
     if (data.officiating_pastor) {
       pastorQuery.value = data.officiating_pastor
@@ -290,18 +312,24 @@ async function loadDetail() {
     }
 
     // Fe
-    if (data.faith_answers && typeof data.faith_answers === 'object') {
+    if (
+      data.faith_completed &&
+      data.faith_answers &&
+      typeof data.faith_answers === 'object' &&
+      Object.keys(data.faith_answers).length > 0
+    ) {
       faithAnswers.value = data.faith_answers as Record<string, boolean | null>
     }
-    consentAccepted.value = data.consent_accepted ?? false
-    signatureData.value   = data.signature_data ?? null
+    consentAccepted.value = data.faith_completed ? (data.consent_accepted ?? true) : true
+    signatureData.value = data.signature_data ?? null
     if (signatureData.value) signatureSaved.value = true
 
     // Progress
     identificationDone.value = data.identification_completed
     conversionDone.value = data.conversion_completed
     faithDone.value = data.faith_completed
-    ceremonyDone.value = data.ceremony_completed
+    // Computed from form fields — ceremony_completed in DB is owned by validation view
+    ceremonyDone.value = !!(data.officiating_pastor?.trim() && data.ceremony_date)
     status.value = data.status
 
     // Snapshot inicial (datos ya guardados en DB)
@@ -362,16 +390,17 @@ async function save() {
       administrative_meeting_date: administrativeMeetingDate.value || null,
       ceremony_notes: ceremonyNotes.value || null,
       // Fe
-      faith_answers:    { ...faithAnswers.value },
+      faith_answers: { ...faithAnswers.value },
       consent_accepted: consentAccepted.value,
-      signature_data:   signatureData.value,
+      signature_data: signatureData.value,
     }
 
     const result = await saveCandidateForm(id, payload)
     identificationDone.value = result.identification_completed
     conversionDone.value = result.conversion_completed
     faithDone.value = result.faith_completed
-    ceremonyDone.value = result.ceremony_completed
+    // Computed from form fields — ceremony_completed in DB is owned by validation view
+    ceremonyDone.value = result.ceremony_data_completed
     status.value = result.status
 
     // Sync back to candidate ref for PDF
@@ -414,7 +443,9 @@ async function handleGeneratePdf() {
   } catch (err) {
     console.error('[PDF] Error al generar:', err)
     saveMsg.value = 'Error al generar el PDF. Revisa la consola del navegador.'
-    setTimeout(() => { saveMsg.value = '' }, 4000)
+    setTimeout(() => {
+      saveMsg.value = ''
+    }, 4000)
   } finally {
     generatingPdf.value = false
   }
@@ -679,7 +710,7 @@ function setFaithAnswer(idx: number, val: boolean) {
           <span class="hidden sm:inline">{{ generatingPdf ? 'Generando…' : 'PDF' }}</span>
         </button>
         <button
-          v-if="status !== 'completed'"
+          v-if="canWrite && status !== 'completed'"
           type="button"
           @click="showDeleteConfirm = true"
           class="p-2 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
@@ -797,10 +828,7 @@ function setFaithAnswer(idx: number, val: boolean) {
     </div>
 
     <!-- ── Tabs card ──────────────────────────────────────────────────────── -->
-    <div
-      v-if="!loadError"
-      class="bg-white rounded-2xl shadow-sm border border-gray-100"
-    >
+    <div v-if="!loadError" class="bg-white rounded-2xl shadow-sm border border-gray-100">
       <div class="px-6 pt-4">
         <Tabs v-model="activeTab" :tabs="tabs" />
       </div>
@@ -855,21 +883,22 @@ function setFaithAnswer(idx: number, val: boolean) {
                       {
                         label: 'País',
                         value:
-                          [person?.country, person?.postal_code]
-                            .filter(Boolean)
-                            .join(' — CP: ') || null,
+                          [person?.country, person?.postal_code].filter(Boolean).join(' — CP: ') ||
+                          null,
                       },
                       { label: 'Teléfono', value: person?.phone },
                       { label: 'Correo', value: person?.institutional_email },
                       // Extra docente
-                      ...(candidate?.teachers ? [
-                        { label: 'Grado académico', value: candidate.teachers.academic_degree },
-                        { label: 'Régimen', value: candidate.teachers.dedication_regime },
-                        { label: 'Cond. laboral', value: candidate.teachers.labor_condition },
-                        { label: 'Facultad', value: candidate.teachers.faculty },
-                        { label: 'EP Principal', value: candidate.teachers.main_ep },
-                        { label: 'Campus', value: candidate.teachers.campus },
-                      ] : []),
+                      ...(candidate?.teachers
+                        ? [
+                            { label: 'Grado académico', value: candidate.teachers.academic_degree },
+                            { label: 'Régimen', value: candidate.teachers.dedication_regime },
+                            { label: 'Cond. laboral', value: candidate.teachers.labor_condition },
+                            { label: 'Facultad', value: candidate.teachers.faculty },
+                            { label: 'EP Principal', value: candidate.teachers.main_ep },
+                            { label: 'Campus', value: candidate.teachers.campus },
+                          ]
+                        : []),
                     ]"
                     :key="i"
                     class="flex items-center gap-3 px-4 py-2.5"
@@ -1283,7 +1312,7 @@ function setFaithAnswer(idx: number, val: boolean) {
                         >
                         <button
                           type="button"
-                          @click="showGuardian2 = false; guardian2Name = ''; guardian2Document = ''"
+                          @click="removeGuardian2"
                           class="text-xs text-gray-400 hover:text-red-500 transition-colors"
                         >
                           Quitar
@@ -1313,7 +1342,10 @@ function setFaithAnswer(idx: number, val: boolean) {
             </Transition>
 
             <!-- Guardar -->
-            <div class="flex items-center gap-3 mt-6 pt-4 pb-6 border-t border-gray-100">
+            <div
+              v-if="canWrite"
+              class="flex items-center gap-3 mt-6 pt-4 pb-6 border-t border-gray-100"
+            >
               <button
                 type="button"
                 :disabled="saving"
@@ -1349,9 +1381,12 @@ function setFaithAnswer(idx: number, val: boolean) {
                 {{ saving ? 'Guardando…' : 'Guardar' }}
               </button>
               <Transition name="fade">
-                <span v-if="saveMsg" class="text-xs font-medium" :class="saveMsgError ? 'text-red-600' : 'text-emerald-600'">{{
-                  saveMsg
-                }}</span>
+                <span
+                  v-if="saveMsg"
+                  class="text-xs font-medium"
+                  :class="saveMsgError ? 'text-red-600' : 'text-emerald-600'"
+                  >{{ saveMsg }}</span
+                >
               </Transition>
             </div>
           </template>
@@ -1428,7 +1463,7 @@ function setFaithAnswer(idx: number, val: boolean) {
                         >
                         <button
                           type="button"
-                          @click="showInstructor2 = false; biblicalInstructor2 = ''"
+                          @click="removeInstructor2"
                           class="text-xs text-gray-400 hover:text-red-500 transition-colors"
                         >
                           Quitar
@@ -1509,133 +1544,267 @@ function setFaithAnswer(idx: number, val: boolean) {
                 </div>
 
                 <div class="space-y-4">
-                  <!-- ¿Cómo conociste la IASD? -->
+                  <!-- ¿Cómo conociste la IASD? (colapsable) -->
                   <div>
-                    <label class="flex items-center gap-1 text-xs font-medium text-gray-500 mb-2">
+                    <button
+                      type="button"
+                      @click="showHowKnewIasd = !showHowKnewIasd"
+                      class="w-full flex items-center gap-1 mb-1 group"
+                    >
                       <FieldStatus v-if="savedSnap" :filled="!!savedSnap.howKnewIasd" />
-                      ¿Cómo conociste la IASD?
-                      <span class="text-gray-400 font-normal">(marca solo una opción)</span>
-                    </label>
-                    <div class="grid grid-cols-2 gap-1.5">
-                      <label
-                        v-for="opt in HOW_KNEW_IASD_OPTIONS"
-                        :key="opt"
-                        class="flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all select-none"
-                        :class="
-                          howKnewIasd === opt
-                            ? 'border-[#068ab8]/30 bg-[#068ab8]/5'
-                            : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
-                        "
-                      >
-                        <input type="radio" :value="opt" v-model="howKnewIasd" class="sr-only" />
-                        <div
-                          class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors"
-                          :class="howKnewIasd === opt ? 'border-[#068ab8]' : 'border-gray-300'"
-                        >
-                          <div
-                            v-if="howKnewIasd === opt"
-                            class="w-2 h-2 rounded-full bg-[#068ab8]"
-                          />
-                        </div>
+                      <span class="flex-1 text-xs font-medium text-gray-500 text-left">
+                        ¿Cómo conociste la IASD?
+                        <span class="text-gray-400 font-normal">(marca solo una opción)</span>
                         <span
-                          class="text-sm"
-                          :class="
-                            howKnewIasd === opt ? 'text-[#068ab8] font-medium' : 'text-gray-600'
-                          "
-                          >{{ opt }}</span
+                          v-if="savedSnap?.howKnewIasd && !showHowKnewIasd"
+                          class="ml-1 text-[#068ab8] font-semibold"
+                          >— {{ howKnewIasd }}</span
                         >
-                      </label>
-                    </div>
+                      </span>
+                      <span
+                        class="shrink-0 flex items-center gap-1 text-[11px] font-medium text-[#068ab8] group-hover:text-[#04395a] transition-colors"
+                      >
+                        {{ showHowKnewIasd ? 'Ocultar' : 'Ver opciones' }}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke-width="2.5"
+                          stroke="currentColor"
+                          class="w-3.5 h-3.5 transition-transform duration-200"
+                          :class="showHowKnewIasd ? 'rotate-180' : ''"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m19.5 8.25-7.5 7.5-7.5-7.5"
+                          />
+                        </svg>
+                      </span>
+                    </button>
+                    <Transition
+                      enter-active-class="transition-all duration-200 ease-out overflow-hidden"
+                      enter-from-class="opacity-0 max-h-0"
+                      enter-to-class="opacity-100 max-h-[9999px]"
+                      leave-active-class="transition-all duration-150 ease-in overflow-hidden"
+                      leave-from-class="opacity-100 max-h-[9999px]"
+                      leave-to-class="opacity-0 max-h-0"
+                    >
+                      <div v-show="showHowKnewIasd" class="grid grid-cols-2 gap-1.5 mt-2">
+                        <label
+                          v-for="opt in HOW_KNEW_IASD_OPTIONS"
+                          :key="opt"
+                          class="flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all select-none"
+                          :class="
+                            howKnewIasd === opt
+                              ? 'border-[#068ab8]/30 bg-[#068ab8]/5'
+                              : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
+                          "
+                        >
+                          <input type="radio" :value="opt" v-model="howKnewIasd" class="sr-only" />
+                          <div
+                            class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors"
+                            :class="howKnewIasd === opt ? 'border-[#068ab8]' : 'border-gray-300'"
+                          >
+                            <div
+                              v-if="howKnewIasd === opt"
+                              class="w-2 h-2 rounded-full bg-[#068ab8]"
+                            />
+                          </div>
+                          <span
+                            class="text-sm"
+                            :class="
+                              howKnewIasd === opt ? 'text-[#068ab8] font-medium' : 'text-gray-600'
+                            "
+                            >{{ opt }}</span
+                          >
+                        </label>
+                      </div>
+                    </Transition>
                   </div>
 
-                  <!-- ¿Cómo estudiaste la Biblia? -->
+                  <!-- ¿Cómo estudiaste la Biblia? (colapsable) -->
                   <div>
-                    <label class="flex items-center gap-1 text-xs font-medium text-gray-500 mb-2">
+                    <button
+                      type="button"
+                      @click="showHowStudiedBible = !showHowStudiedBible"
+                      class="w-full flex items-center gap-1 mb-1 group"
+                    >
                       <FieldStatus v-if="savedSnap" :filled="!!savedSnap.howStudiedBible" />
-                      ¿Cómo estudiaste la Biblia?
-                      <span class="text-gray-400 font-normal">(marca solo una opción)</span>
-                    </label>
-                    <div class="grid grid-cols-2 gap-1.5">
-                      <label
-                        v-for="opt in HOW_STUDIED_BIBLE_OPTIONS"
-                        :key="opt"
-                        class="flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all select-none"
-                        :class="
-                          howStudiedBible === opt
-                            ? 'border-[#068ab8]/30 bg-[#068ab8]/5'
-                            : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
-                        "
-                      >
-                        <input
-                          type="radio"
-                          :value="opt"
-                          v-model="howStudiedBible"
-                          class="sr-only"
-                        />
-                        <div
-                          class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors"
-                          :class="howStudiedBible === opt ? 'border-[#068ab8]' : 'border-gray-300'"
-                        >
-                          <div
-                            v-if="howStudiedBible === opt"
-                            class="w-2 h-2 rounded-full bg-[#068ab8]"
-                          />
-                        </div>
+                      <span class="flex-1 text-xs font-medium text-gray-500 text-left">
+                        ¿Cómo estudiaste la Biblia?
+                        <span class="text-gray-400 font-normal">(marca solo una opción)</span>
                         <span
-                          class="text-sm"
-                          :class="
-                            howStudiedBible === opt ? 'text-[#068ab8] font-medium' : 'text-gray-600'
-                          "
-                          >{{ opt }}</span
+                          v-if="savedSnap?.howStudiedBible && !showHowStudiedBible"
+                          class="ml-1 text-[#068ab8] font-semibold"
+                          >— {{ howStudiedBible }}</span
                         >
-                      </label>
-                    </div>
+                      </span>
+                      <span
+                        class="shrink-0 flex items-center gap-1 text-[11px] font-medium text-[#068ab8] group-hover:text-[#04395a] transition-colors"
+                      >
+                        {{ showHowStudiedBible ? 'Ocultar' : 'Ver opciones' }}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke-width="2.5"
+                          stroke="currentColor"
+                          class="w-3.5 h-3.5 transition-transform duration-200"
+                          :class="showHowStudiedBible ? 'rotate-180' : ''"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m19.5 8.25-7.5 7.5-7.5-7.5"
+                          />
+                        </svg>
+                      </span>
+                    </button>
+                    <Transition
+                      enter-active-class="transition-all duration-200 ease-out overflow-hidden"
+                      enter-from-class="opacity-0 max-h-0"
+                      enter-to-class="opacity-100 max-h-[9999px]"
+                      leave-active-class="transition-all duration-150 ease-in overflow-hidden"
+                      leave-from-class="opacity-100 max-h-[9999px]"
+                      leave-to-class="opacity-0 max-h-0"
+                    >
+                      <div v-show="showHowStudiedBible" class="grid grid-cols-2 gap-1.5 mt-2">
+                        <label
+                          v-for="opt in HOW_STUDIED_BIBLE_OPTIONS"
+                          :key="opt"
+                          class="flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all select-none"
+                          :class="
+                            howStudiedBible === opt
+                              ? 'border-[#068ab8]/30 bg-[#068ab8]/5'
+                              : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
+                          "
+                        >
+                          <input
+                            type="radio"
+                            :value="opt"
+                            v-model="howStudiedBible"
+                            class="sr-only"
+                          />
+                          <div
+                            class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors"
+                            :class="
+                              howStudiedBible === opt ? 'border-[#068ab8]' : 'border-gray-300'
+                            "
+                          >
+                            <div
+                              v-if="howStudiedBible === opt"
+                              class="w-2 h-2 rounded-full bg-[#068ab8]"
+                            />
+                          </div>
+                          <span
+                            class="text-sm"
+                            :class="
+                              howStudiedBible === opt
+                                ? 'text-[#068ab8] font-medium'
+                                : 'text-gray-600'
+                            "
+                            >{{ opt }}</span
+                          >
+                        </label>
+                      </div>
+                    </Transition>
                   </div>
 
-                  <!-- ¿Factor decisivo? -->
+                  <!-- ¿Factor decisivo? (colapsable) -->
                   <div>
-                    <label class="flex items-center gap-1 text-xs font-medium text-gray-500 mb-2">
+                    <button
+                      type="button"
+                      @click="showDecisiveFactor = !showDecisiveFactor"
+                      class="w-full flex items-center gap-1 mb-1 group"
+                    >
                       <FieldStatus v-if="savedSnap" :filled="!!savedSnap.decisiveFactor" />
-                      ¿Cuál fue el factor decisivo para que seas bautizado/a?
-                      <span class="text-gray-400 font-normal">(marca solo una opción)</span>
-                    </label>
-                    <div class="grid grid-cols-2 gap-1.5">
-                      <label
-                        v-for="opt in DECISIVE_FACTOR_OPTIONS"
-                        :key="opt"
-                        class="flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all select-none"
-                        :class="
-                          decisiveFactor === opt
-                            ? 'border-[#068ab8]/30 bg-[#068ab8]/5'
-                            : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
-                        "
-                      >
-                        <input type="radio" :value="opt" v-model="decisiveFactor" class="sr-only" />
-                        <div
-                          class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors"
-                          :class="decisiveFactor === opt ? 'border-[#068ab8]' : 'border-gray-300'"
-                        >
-                          <div
-                            v-if="decisiveFactor === opt"
-                            class="w-2 h-2 rounded-full bg-[#068ab8]"
-                          />
-                        </div>
+                      <span class="flex-1 text-xs font-medium text-gray-500 text-left">
+                        ¿Cuál fue el factor decisivo para que seas bautizado/a?
+                        <span class="text-gray-400 font-normal">(marca solo una opción)</span>
                         <span
-                          class="text-sm"
-                          :class="
-                            decisiveFactor === opt ? 'text-[#068ab8] font-medium' : 'text-gray-600'
-                          "
-                          >{{ opt }}</span
+                          v-if="savedSnap?.decisiveFactor && !showDecisiveFactor"
+                          class="ml-1 text-[#068ab8] font-semibold"
+                          >— {{ decisiveFactor }}</span
                         >
-                      </label>
-                    </div>
+                      </span>
+                      <span
+                        class="shrink-0 flex items-center gap-1 text-[11px] font-medium text-[#068ab8] group-hover:text-[#04395a] transition-colors"
+                      >
+                        {{ showDecisiveFactor ? 'Ocultar' : 'Ver opciones' }}
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke-width="2.5"
+                          stroke="currentColor"
+                          class="w-3.5 h-3.5 transition-transform duration-200"
+                          :class="showDecisiveFactor ? 'rotate-180' : ''"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m19.5 8.25-7.5 7.5-7.5-7.5"
+                          />
+                        </svg>
+                      </span>
+                    </button>
+                    <Transition
+                      enter-active-class="transition-all duration-200 ease-out overflow-hidden"
+                      enter-from-class="opacity-0 max-h-0"
+                      enter-to-class="opacity-100 max-h-[9999px]"
+                      leave-active-class="transition-all duration-150 ease-in overflow-hidden"
+                      leave-from-class="opacity-100 max-h-[9999px]"
+                      leave-to-class="opacity-0 max-h-0"
+                    >
+                      <div v-show="showDecisiveFactor" class="grid grid-cols-2 gap-1.5 mt-2">
+                        <label
+                          v-for="opt in DECISIVE_FACTOR_OPTIONS"
+                          :key="opt"
+                          class="flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer transition-all select-none"
+                          :class="
+                            decisiveFactor === opt
+                              ? 'border-[#068ab8]/30 bg-[#068ab8]/5'
+                              : 'border-gray-100 bg-gray-50 hover:bg-gray-100'
+                          "
+                        >
+                          <input
+                            type="radio"
+                            :value="opt"
+                            v-model="decisiveFactor"
+                            class="sr-only"
+                          />
+                          <div
+                            class="w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors"
+                            :class="decisiveFactor === opt ? 'border-[#068ab8]' : 'border-gray-300'"
+                          >
+                            <div
+                              v-if="decisiveFactor === opt"
+                              class="w-2 h-2 rounded-full bg-[#068ab8]"
+                            />
+                          </div>
+                          <span
+                            class="text-sm"
+                            :class="
+                              decisiveFactor === opt
+                                ? 'text-[#068ab8] font-medium'
+                                : 'text-gray-600'
+                            "
+                            >{{ opt }}</span
+                          >
+                        </label>
+                      </div>
+                    </Transition>
                   </div>
                 </div>
               </div>
             </div>
 
             <!-- Guardar -->
-            <div class="flex items-center gap-3 mt-6 pt-4 pb-6 border-t border-gray-100">
+            <div
+              v-if="canWrite"
+              class="flex items-center gap-3 mt-6 pt-4 pb-6 border-t border-gray-100"
+            >
               <button
                 type="button"
                 :disabled="saving"
@@ -1671,9 +1840,12 @@ function setFaithAnswer(idx: number, val: boolean) {
                 {{ saving ? 'Guardando…' : 'Guardar' }}
               </button>
               <Transition name="fade">
-                <span v-if="saveMsg" class="text-xs font-medium" :class="saveMsgError ? 'text-red-600' : 'text-emerald-600'">{{
-                  saveMsg
-                }}</span>
+                <span
+                  v-if="saveMsg"
+                  class="text-xs font-medium"
+                  :class="saveMsgError ? 'text-red-600' : 'text-emerald-600'"
+                  >{{ saveMsg }}</span
+                >
               </Transition>
             </div>
           </template>
@@ -1916,7 +2088,10 @@ function setFaithAnswer(idx: number, val: boolean) {
             </div>
 
             <!-- Guardar -->
-            <div class="flex items-center gap-3 mt-6 pt-4 pb-6 border-t border-gray-100">
+            <div
+              v-if="canWrite"
+              class="flex items-center gap-3 mt-6 pt-4 pb-6 border-t border-gray-100"
+            >
               <button
                 type="button"
                 :disabled="saving"
@@ -1952,9 +2127,12 @@ function setFaithAnswer(idx: number, val: boolean) {
                 {{ saving ? 'Guardando…' : 'Guardar' }}
               </button>
               <Transition name="fade">
-                <span v-if="saveMsg" class="text-xs font-medium" :class="saveMsgError ? 'text-red-600' : 'text-emerald-600'">{{
-                  saveMsg
-                }}</span>
+                <span
+                  v-if="saveMsg"
+                  class="text-xs font-medium"
+                  :class="saveMsgError ? 'text-red-600' : 'text-emerald-600'"
+                  >{{ saveMsg }}</span
+                >
               </Transition>
             </div>
           </template>
@@ -1976,12 +2154,16 @@ function setFaithAnswer(idx: number, val: boolean) {
           </template>
           <template v-else>
             <div class="space-y-6">
-              <!-- Preguntas sí/no -->
+              <!-- Preguntas sí/no (colapsable) -->
               <div>
-                <div class="flex items-center gap-2 mb-3">
-                  <div class="w-1 h-4 rounded-full bg-[#068ab8]" />
+                <button
+                  type="button"
+                  @click="showFaithQuestions = !showFaithQuestions"
+                  class="w-full flex items-center gap-2 mb-1 group"
+                >
+                  <div class="w-1 h-4 rounded-full bg-[#068ab8] shrink-0" />
                   <h3
-                    class="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1"
+                    class="flex-1 text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1 text-left"
                   >
                     <FieldStatus v-if="savedSnap" :filled="savedSnap.faithAnswersCount > 0" />
                     Preguntas de seguimiento
@@ -1995,42 +2177,72 @@ function setFaithAnswer(idx: number, val: boolean) {
                       respondidas)
                     </span>
                   </h3>
-                </div>
-                <div class="space-y-2">
-                  <div
-                    v-for="(question, i) in FAITH_QUESTIONS"
-                    :key="i"
-                    class="flex items-center gap-3 p-3 rounded-xl border border-gray-100"
+                  <span
+                    class="shrink-0 flex items-center gap-1 text-[11px] font-medium text-[#068ab8] group-hover:text-[#04395a] transition-colors"
                   >
-                    <p class="flex-1 text-sm text-gray-700">{{ question }}</p>
-                    <div class="flex gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        @click="setFaithAnswer(i, true)"
-                        class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all"
-                        :class="
-                          faithAnswers[String(i)] === true
-                            ? 'bg-emerald-500 border-emerald-500 text-white'
-                            : 'border-gray-200 text-gray-500 hover:border-emerald-400 hover:text-emerald-600'
-                        "
-                      >
-                        Sí
-                      </button>
-                      <button
-                        type="button"
-                        @click="setFaithAnswer(i, false)"
-                        class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all"
-                        :class="
-                          faithAnswers[String(i)] === false
-                            ? 'bg-red-500 border-red-500 text-white'
-                            : 'border-gray-200 text-gray-500 hover:border-red-400 hover:text-red-600'
-                        "
-                      >
-                        No
-                      </button>
+                    {{ showFaithQuestions ? 'Ocultar' : 'Ver preguntas' }}
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="2.5"
+                      stroke="currentColor"
+                      class="w-3.5 h-3.5 transition-transform duration-200"
+                      :class="showFaithQuestions ? 'rotate-180' : ''"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="m19.5 8.25-7.5 7.5-7.5-7.5"
+                      />
+                    </svg>
+                  </span>
+                </button>
+
+                <Transition
+                  enter-active-class="transition-all duration-200 ease-out overflow-hidden"
+                  enter-from-class="opacity-0 max-h-0"
+                  enter-to-class="opacity-100 max-h-[9999px]"
+                  leave-active-class="transition-all duration-150 ease-in overflow-hidden"
+                  leave-from-class="opacity-100 max-h-[9999px]"
+                  leave-to-class="opacity-0 max-h-0"
+                >
+                  <div v-show="showFaithQuestions" class="space-y-2 mt-3">
+                    <div
+                      v-for="(question, i) in FAITH_QUESTIONS"
+                      :key="i"
+                      class="flex items-center gap-3 p-3 rounded-xl border border-gray-100"
+                    >
+                      <p class="flex-1 text-sm text-gray-700">{{ question }}</p>
+                      <div class="flex gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          @click="setFaithAnswer(i, true)"
+                          class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all"
+                          :class="
+                            faithAnswers[String(i)] === true
+                              ? 'bg-emerald-500 border-emerald-500 text-white'
+                              : 'border-gray-200 text-gray-500 hover:border-emerald-400 hover:text-emerald-600'
+                          "
+                        >
+                          Sí
+                        </button>
+                        <button
+                          type="button"
+                          @click="setFaithAnswer(i, false)"
+                          class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all"
+                          :class="
+                            faithAnswers[String(i)] === false
+                              ? 'bg-red-500 border-red-500 text-white'
+                              : 'border-gray-200 text-gray-500 hover:border-red-400 hover:text-red-600'
+                          "
+                        >
+                          No
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </Transition>
               </div>
 
               <!-- Consentimiento -->
@@ -2103,14 +2315,14 @@ function setFaithAnswer(idx: number, val: boolean) {
                     ✓ guardada
                   </span>
                 </div>
-                <SignaturePad
-                  v-model="signatureData"
-                  @saved="signatureSaved = true"
-                />
+                <SignaturePad v-model="signatureData" @saved="signatureSaved = true" />
               </div>
 
               <!-- Guardar -->
-              <div class="flex items-center gap-3 pt-2 pb-6 border-t border-gray-100">
+              <div
+                v-if="canWrite"
+                class="flex items-center gap-3 pt-2 pb-6 border-t border-gray-100"
+              >
                 <button
                   type="button"
                   :disabled="saving"
@@ -2329,7 +2541,6 @@ function setFaithAnswer(idx: number, val: boolean) {
       </Transition>
     </Teleport>
   </div>
-
 </template>
 
 <style scoped>

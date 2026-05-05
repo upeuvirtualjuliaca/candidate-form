@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 import { authRoutes } from '@/modules/auth/routes'
 import { usersRoutes } from '@/modules/users/routes'
 import { supabase } from '@/core/supabase'
+import { useAuthStore } from '@/modules/auth/store/auth.store'
 
 const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
@@ -92,6 +93,12 @@ const router = createRouter({
         },
 
         ...usersRoutes,
+
+        {
+          path: 'validation',
+          name: 'validation',
+          component: () => import('@/modules/validation/views/ValidationView.vue'),
+        },
       ],
     },
     {
@@ -102,12 +109,25 @@ const router = createRouter({
   ],
 })
 
+const ADMIN_ONLY_ROUTES = new Set([
+  'admission', 'teachers-import', 'pastors', 'secretaries',
+  'users', 'admin', 'settings',
+])
+
 router.beforeEach(async (to) => {
   const { data } = await supabase.auth.getSession()
   const isAuth = !!data.session
 
   if (!isAuth && to.path !== '/login') return '/login'
   if (isAuth  && to.path === '/login') return '/'
+
+  if (isAuth && ADMIN_ONLY_ROUTES.has(to.name as string)) {
+    const { currentRole } = useAuthStore()
+    // Use already-loaded role from store (no extra network call that could hang)
+    if (currentRole.value !== null && currentRole.value !== 'admin') {
+      return { name: 'dashboard' }
+    }
+  }
 })
 
 export default router

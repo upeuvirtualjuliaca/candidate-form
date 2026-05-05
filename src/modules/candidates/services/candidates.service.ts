@@ -9,9 +9,10 @@ export interface CandidateRow {
   status:                   CandidateStatus
   observations:             string | null
   created_at:               string
-  identification_completed: boolean
-  conversion_completed:     boolean
-  faith_completed:          boolean
+  identification_completed:  boolean
+  conversion_completed:      boolean
+  faith_completed:           boolean
+  ceremony_data_completed:   boolean
   students: {
     id:        string
     dni:       string
@@ -189,6 +190,7 @@ export interface CompletionResult {
   conversion_completed:     boolean
   faith_completed:          boolean
   ceremony_completed:       boolean
+  ceremony_data_completed:  boolean
   status:                   CandidateStatus
 }
 
@@ -196,7 +198,7 @@ export interface CompletionResult {
 
 const CANDIDATE_LIST_SELECT = `
   id, status, observations, created_at,
-  identification_completed, conversion_completed, faith_completed,
+  identification_completed, conversion_completed, faith_completed, ceremony_data_completed,
   students ( id, dni, full_name, program, faculty, campus ),
   teachers ( id, dni, full_name, faculty, main_ep, campus )
 `
@@ -205,6 +207,7 @@ export async function getCandidates(
   page:     number = 1,
   pageSize: number = 10,
   status?:  CandidateStatus,
+  search?:  string,
 ): Promise<PaginatedCandidates> {
   const from = (page - 1) * pageSize
   const to   = from + pageSize - 1
@@ -216,6 +219,14 @@ export async function getCandidates(
     .range(from, to)
 
   if (status) query = query.eq('status', status)
+
+  if (search?.trim()) {
+    const term = `%${search.trim()}%`
+    query = query.or(
+      `students.full_name.ilike.${term},students.dni.ilike.${term},students.student_code.ilike.${term},` +
+      `teachers.full_name.ilike.${term},teachers.dni.ilike.${term}`
+    )
+  }
 
   const { data, count, error } = await query
   if (error) throw error
@@ -283,7 +294,8 @@ export async function saveCandidateForm(
   payload: CandidateFormPayload,
 ): Promise<CompletionResult> {
   const identification_completed = !!(
-    payload.address?.trim()
+    payload.address?.trim() &&
+    payload.education_level
   )
   const conversion_completed = !!(
     payload.biblical_instructor_1?.trim() &&
@@ -292,14 +304,18 @@ export async function saveCandidateForm(
   const faith_completed = !!(
     payload.consent_accepted &&
     payload.faith_answers &&
-    Object.values(payload.faith_answers).some(v => v !== null)
+    Object.values(payload.faith_answers).some(v => v !== null) &&
+    payload.signature_data?.trim()
   )
-  const ceremony_completed = !!(
+  // ceremony_data_completed: tab Ceremonia tiene los campos mínimos llenos
+  // (distinto de ceremony_completed que marca el bautismo físico en validación)
+  const ceremony_data_completed = !!(
     payload.officiating_pastor?.trim() &&
-    payload.ceremony_date
+    payload.ceremony_date?.trim()
   )
+
   const status: CandidateStatus =
-    identification_completed && conversion_completed && faith_completed && ceremony_completed
+    identification_completed && conversion_completed && faith_completed && ceremony_data_completed
       ? 'completed'
       : 'draft'
 
@@ -308,12 +324,12 @@ export async function saveCandidateForm(
     identification_completed,
     conversion_completed,
     faith_completed,
-    ceremony_completed,
+    ceremony_data_completed,
     status,
   }).eq('id', id)
 
   if (error) throw error
-  return { identification_completed, conversion_completed, faith_completed, ceremony_completed, status }
+  return { identification_completed, conversion_completed, faith_completed, ceremony_completed: ceremony_data_completed, ceremony_data_completed, status }
 }
 
 export async function deleteCandidate(id: string): Promise<void> {

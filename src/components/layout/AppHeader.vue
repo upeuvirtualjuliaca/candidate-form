@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/core/supabase'
 import { useAuthStore } from '@/modules/auth/store/auth.store'
+import GlobalSearch from '@/components/ui/GlobalSearch.vue'
 
 defineProps<{ sidebarOpen: boolean }>()
 defineEmits<{ toggleSidebar: [] }>()
@@ -47,15 +48,15 @@ const initials = computed(() => {
   return name.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
 })
 
-onMounted(async () => {
-  if (!currentUser.value) return
+watch(currentUser, async (user) => {
+  if (!user) { profile.value = null; return }
   const { data } = await supabase
     .from('user_profiles')
     .select('full_name, role')
-    .eq('id', currentUser.value.id)
+    .eq('id', user.id)
     .single()
   if (data) profile.value = data
-})
+}, { immediate: true })
 
 // ── Dropdown ────────────────────────────────────────────────────────────────
 const open    = ref(false)
@@ -79,7 +80,7 @@ async function handleSignOut() {
 </script>
 
 <template>
-  <header class="sticky top-0 z-10 flex items-center gap-4 px-4 md:px-6 h-16 bg-white border-b border-gray-100 shadow-sm">
+  <header class="sticky top-0 z-10 flex items-center gap-1 lg:gap-4 px-2 md:px-4 lg:px-6 h-20 lg:h-16 bg-white border-b border-gray-100 shadow-sm">
 
     <!-- Hamburger -->
     <button
@@ -93,10 +94,15 @@ async function handleSignOut() {
       </svg>
     </button>
 
-    <!-- Page title -->
-    <h1 class="text-base font-semibold text-[#04395a] tracking-tight flex-1 truncate">
+    <!-- Page title (hidden on mobile/tablet, visible on desktop) -->
+    <h1 class="hidden lg:block text-base font-semibold text-[#04395a] tracking-tight shrink-0 truncate max-w-none">
       {{ pageTitle }}
     </h1>
+
+    <!-- Global search -->
+    <div class="flex-1 flex justify-center min-w-0 lg:px-4">
+      <GlobalSearch />
+    </div>
 
     <!-- Right -->
     <div class="flex items-center gap-3">

@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import siloeLogo from '@/modules/admin/assets/siloe.png'
+import iglesiaLogo from '@/modules/admin/assets/iglesia_blanco.png'
+import { usePermissions } from '@/composables/usePermissions'
 
 defineProps<{ open: boolean }>()
 defineEmits<{ close: [] }>()
@@ -44,15 +47,17 @@ const iSettings = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="
 const iPastors = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>`
 const iSecretaries = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Zm0 3h.008v.008h-.008v-.008Z" /></svg>`
 const iUsers = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" /></svg>`
+const iValidation = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 shrink-0"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" /></svg>`
 
 // ── Nav definition ─────────────────────────────────────────────────────────
 const navItems: NavItem[] = [
   { id: 'dashboard', name: 'Dashboard', to: '/', icon: iDashboard },
+  { id: 'users', name: 'Usuarios', to: '/users', icon: iUsers },
 
   {
     id: 'admission',
-    name: 'Importar',
-    icon: iAdmission,
+    name: 'Configuración',
+    icon: iSettings,
     children: [
       { name: 'Estudiantes', to: '/admission' },
       { name: 'Docentes', to: '/teachers-import' },
@@ -65,24 +70,22 @@ const navItems: NavItem[] = [
     id: 'students',
     name: 'Candidatos',
     icon: iStudents,
-    children: [{ name: 'Gestión', to: '/students' }],
+    children: [{ name: 'Listado', to: '/students' }],
   },
 
   {
     id: 'candidates',
     name: 'Fichas',
     icon: iCandidates,
-    children: [{ name: 'Gestión', to: '/candidates' }],
+    children: [{ name: 'Registros', to: '/candidates' }],
   },
-
+  { id: 'validation', name: 'Validación', to: '/validation', icon: iValidation },
   {
     id: 'reports',
     name: 'Reportes',
     icon: iReports,
-    children: [{ name: 'General', to: '/reports' }],
+    children: [{ name: 'Resumen', to: '/reports' }],
   },
-
-  { id: 'users', name: 'Usuarios', to: '/users', icon: iUsers },
 
   /* {
     id: 'admin',
@@ -91,13 +94,23 @@ const navItems: NavItem[] = [
     children: [{ name: 'Gestión', to: '/admin' }],
   }, */
 
-  {
+  /* {
     id: 'settings',
     name: 'Configuración',
     icon: iSettings,
     children: [{ name: 'Gestión', to: '/settings' }],
-  },
+  }, */
 ]
+
+const { canAdmin } = usePermissions()
+
+// Solo admin ve: Usuarios + grupo Configuración
+// Todos ven: Dashboard, Candidatos, Fichas, Validación, Reportes
+const visibleNavItems = computed(() =>
+  navItems.filter(item =>
+    canAdmin.value || !['users', 'admission'].includes(item.id),
+  ),
+)
 
 // ── Collapse state ─────────────────────────────────────────────────────────
 const openGroups = ref<Set<string>>(new Set())
@@ -125,7 +138,7 @@ function isChildActive(to: string): boolean {
 
 // Auto-open groups that contain the active route
 function syncOpenGroups() {
-  navItems.forEach((item) => {
+  visibleNavItems.value.forEach((item) => {
     if (isGroup(item) && groupHasActiveChild(item)) {
       openGroups.value.add(item.id)
     }
@@ -152,26 +165,17 @@ watch(() => route.path, syncOpenGroups)
     ]"
   >
     <!-- Logo -->
-    <div class="flex items-center gap-3 px-5 py-5 border-b border-white/10 shrink-0">
-      <div class="w-9 h-9 rounded-xl bg-[#fdc710] flex items-center justify-center shrink-0">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#04395a" class="w-5 h-5">
-          <path
-            d="M11.7 2.805a.75.75 0 0 1 .6 0A60.65 60.65 0 0 1 22.83 8.72a.75.75 0 0 1-.231 1.337 49.948 49.948 0 0 0-9.902 3.912l-.003.002c-.114.06-.227.119-.34.18a.75.75 0 0 1-.707 0A50.88 50.88 0 0 0 7.5 12.173v-.224c0-.131.067-.248.172-.311a54.615 54.615 0 0 1 4.653-2.52.75.75 0 0 0-.65-1.352 56.123 56.123 0 0 0-4.78 2.589 1.858 1.858 0 0 0-.859 1.228 49.803 49.803 0 0 0-4.634-1.527.75.75 0 0 1-.231-1.337A60.653 60.653 0 0 1 11.7 2.805Z"
-          />
-          <path
-            d="M13.06 15.473a48.45 48.45 0 0 1 7.666-3.282c.134 1.414.22 2.843.255 4.284a.75.75 0 0 1-.46.71 47.87 47.87 0 0 1-8.105 2.571.75.75 0 0 1-.832-.536 48.808 48.808 0 0 1-.612-3.747ZM8.943 16.03a49.117 49.117 0 0 0-6.661 3.107.75.75 0 0 0-.325.97 48.783 48.783 0 0 0 5.343 8.17.75.75 0 0 0 1.175-.015 48.807 48.807 0 0 0 5.343-8.155.75.75 0 0 0-.325-.97 48.783 48.783 0 0 0-4.55-3.107Z"
-          />
-        </svg>
-      </div>
+    <div class="flex items-center gap-3 px-5 py-4 border-b border-white/10 shrink-0">
+      <img :src="siloeLogo" alt="Siloé" class="w-10 h-10 rounded-xl object-contain shrink-0" />
       <div class="leading-tight min-w-0">
-        <p class="text-sm font-bold tracking-wide text-white truncate">CandidateReg</p>
-        <p class="text-[10px] text-white/50 tracking-widest uppercase">Admin Panel</p>
+        <p class="text-sm font-bold tracking-wide text-white truncate">Siloé</p>
+        <p class="text-[10px] text-white/50 tracking-widest uppercase">Panel Administración</p>
       </div>
     </div>
 
     <!-- Nav -->
     <nav class="flex-1 overflow-y-auto px-3 py-3 space-y-0.5 scrollbar-thin">
-      <template v-for="item in navItems" :key="item.id">
+      <template v-for="item in visibleNavItems" :key="item.id">
         <!-- Single item (Dashboard) -->
         <RouterLink
           v-if="!isGroup(item)"
@@ -267,8 +271,12 @@ watch(() => route.path, syncOpenGroups)
     </nav>
 
     <!-- Footer -->
-    <div class="px-5 py-3.5 border-t border-white/10 shrink-0">
-      <p class="text-[11px] text-white/30 text-center">v1.0.0 &mdash; 2026</p>
+    <div class="px-5 py-3 border-t border-white/10 shrink-0 flex items-center justify-center">
+      <img
+        :src="iglesiaLogo"
+        alt="Iglesia Adventista"
+        class="w-28 h-28 object-contain opacity-30"
+      />
     </div>
   </aside>
 </template>

@@ -12,14 +12,18 @@
     "lint": "run-s lint:*",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
-    "format": "prettier --write --experimental-cli src/"
+    "format": "prettier --write --experimental-cli src/",
+    "deploy": "npm run build && npx gh-pages -d dist --nojekyll"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.0",
+    "chart.js": "^4.5.1",
     "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.7",
     "notivue": "^2.4.5",
     "pinia": "^3.0.4",
     "vue": "^3.5.32",
+    "vue-chartjs": "^5.3.3",
     "vue-router": "^5.0.4",
     "xlsx": "^0.18.5"
   },
@@ -34,6 +38,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-oxlint": "~1.60.0",
     "eslint-plugin-vue": "~10.8.0",
+    "gh-pages": "^6.3.0",
     "jiti": "^2.6.1",
     "npm-run-all2": "^8.0.4",
     "oxlint": "~1.60.0",
