@@ -14,20 +14,22 @@ export interface CandidateRow {
   faith_completed:           boolean
   ceremony_data_completed:   boolean
   students: {
-    id:        string
-    dni:       string
-    full_name: string
-    program:   string | null
-    faculty:   string | null
-    campus:    string | null
+    id:         string
+    dni:        string
+    full_name:  string
+    program:    string | null
+    faculty:    string | null
+    campus:     string | null
+    birth_date: string | null
   } | null
   teachers: {
-    id:        string
-    dni:       string
-    full_name: string
-    faculty:   string | null
-    main_ep:   string | null
-    campus:    string | null
+    id:         string
+    dni:        string
+    full_name:  string
+    faculty:    string | null
+    main_ep:    string | null
+    campus:     string | null
+    birth_date: string | null
   } | null
   created_by:      string | null
   created_by_name: string | null
@@ -90,6 +92,7 @@ export interface CandidateDetail {
   faith_observations:            string | null
   consent_accepted:              boolean
   signature_data:                string | null
+  guardian_signature_data:       string | null
 
   // ── Progreso ────────────────────────────────────────────────
   identification_completed:      boolean
@@ -190,6 +193,7 @@ export interface CandidateFormPayload {
   faith_observations?:         string | null
   consent_accepted?:           boolean
   signature_data?:             string | null
+  guardian_signature_data?:    string | null
 }
 
 export interface CompletionResult {
@@ -206,8 +210,8 @@ export interface CompletionResult {
 const CANDIDATE_LIST_SELECT = `
   id, status, observations, created_at, created_by, created_by_name,
   identification_completed, conversion_completed, faith_completed, ceremony_data_completed,
-  students ( id, dni, full_name, program, faculty, campus ),
-  teachers ( id, dni, full_name, faculty, main_ep, campus )
+  students ( id, dni, full_name, program, faculty, campus, birth_date ),
+  teachers ( id, dni, full_name, faculty, main_ep, campus, birth_date )
 `
 
 export async function getCandidates(
@@ -268,7 +272,7 @@ export async function getCandidateDetail(id: string): Promise<CandidateDetail> {
       conversion_date, conversion_place, influential_person, spiritual_experience, conversion_observations,
       biblical_instructor_1, biblical_instructor_2, previous_religion,
       how_knew_iasd, how_studied_bible, decisive_factor,
-      commitment_checks, faith_answers, final_declaration, faith_observations, consent_accepted, signature_data,
+      commitment_checks, faith_answers, final_declaration, faith_observations, consent_accepted, signature_data, guardian_signature_data,
       identification_completed, conversion_completed, faith_completed, ceremony_completed,
       students (
         id, dni, full_name, sex, institutional_email, phone,
@@ -325,11 +329,20 @@ export async function createCandidate(studentId: string, createdByName?: string 
 export async function saveCandidateForm(
   id:      string,
   payload: CandidateFormPayload,
+  isMinor: boolean = false,
 ): Promise<CompletionResult> {
-  const identification_completed = !!(
+  const baseIdentification = !!(
     payload.address?.trim() &&
     payload.education_level
   )
+  const guardianComplete = !!(
+    payload.guardian_1_name?.trim() &&
+    payload.guardian_1_document?.trim() &&
+    payload.guardian_signature_data?.trim()
+  )
+  // Para menores: solo se exige que el responsable esté completo (nombre + doc + firma).
+  // Para mayores: lógica base sin cambios.
+  const identification_completed = isMinor ? guardianComplete : baseIdentification
   const conversion_completed = !!(
     payload.biblical_instructor_1?.trim() &&
     payload.how_knew_iasd?.trim()

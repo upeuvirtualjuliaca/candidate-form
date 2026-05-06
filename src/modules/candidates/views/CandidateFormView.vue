@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePermissions } from '@/composables/usePermissions'
+import { useToastStore } from '@/stores/toast'
 import Tabs, { type Tab } from '@/components/ui/Tabs.vue'
 import {
   getCandidateDetail,
@@ -28,6 +29,7 @@ const route = useRoute()
 const router = useRouter()
 const id = computed(() => route.params['id'] as string)
 const { canWrite } = usePermissions()
+const toast = useToastStore()
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
@@ -59,6 +61,16 @@ function triggerSavedToast() {
   if (savedToastTimer) clearTimeout(savedToastTimer)
   showSavedToast.value = true
   savedToastTimer = setTimeout(() => { showSavedToast.value = false }, 3500)
+}
+
+function triggerMinorWarning() {
+  if (!isMinor.value) return
+  setTimeout(() => {
+    toast.warning(
+      '⚠ Candidato menor de edad',
+      'Verifique que cuenta con la autorización y presencia de un tutor o apoderado.',
+    )
+  }, 1800)
 }
 
 const candidate = ref<CandidateDetail | null>(null)
@@ -147,6 +159,8 @@ const faithAnswers = ref<Record<string, boolean | null>>(
 const consentAccepted = ref(true)
 const signatureData = ref<string | null>(null)
 const signatureSaved = ref(false)
+const guardianSignatureData = ref<string | null>(null)
+const guardianSignatureSaved = ref(false)
 
 // Ceremonia
 const todayStr = new Date().toISOString().slice(0, 10)
@@ -331,6 +345,8 @@ async function loadDetail() {
     consentAccepted.value = data.faith_completed ? (data.consent_accepted ?? true) : true
     signatureData.value = data.signature_data ?? null
     if (signatureData.value) signatureSaved.value = true
+    guardianSignatureData.value = data.guardian_signature_data ?? null
+    if (guardianSignatureData.value) guardianSignatureSaved.value = true
 
     // Progress
     identificationDone.value = data.identification_completed
@@ -349,9 +365,10 @@ async function loadDetail() {
   }
 }
 
-watch(id, () => {
-  loadDetail()
+watch(id, async () => {
+  await loadDetail()
   loadPrincipalSecretary()
+  if (route.query['new'] === '1') triggerMinorWarning()
 }, { immediate: true })
 
 // ── Save ───────────────────────────────────────────────────────────────────
@@ -401,9 +418,10 @@ async function save() {
       faith_answers: { ...faithAnswers.value },
       consent_accepted: consentAccepted.value,
       signature_data: signatureData.value,
+      guardian_signature_data: isMinor.value ? guardianSignatureData.value : null,
     }
 
-    const result = await saveCandidateForm(id.value, payload)
+    const result = await saveCandidateForm(id.value, payload, isMinor.value)
     identificationDone.value = result.identification_completed
     conversionDone.value = result.conversion_completed
     faithDone.value = result.faith_completed
@@ -421,6 +439,7 @@ async function save() {
 
     saveMsg.value = 'Guardado correctamente.'
     triggerSavedToast()
+    triggerMinorWarning()
     setTimeout(() => {
       saveMsg.value = ''
     }, 2500)
@@ -628,9 +647,18 @@ function setFaithAnswer(idx: number, val: boolean) {
           <div class="h-3 w-36 bg-gray-100 rounded animate-pulse" />
         </template>
         <template v-else>
-          <h2 class="text-2xl font-bold text-[#04395a] truncate">
-            {{ person?.full_name ?? 'Candidato' }}
-          </h2>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h2 class="text-2xl font-bold text-[#04395a] truncate">
+              {{ person?.full_name ?? 'Candidato' }}
+            </h2>
+            <span v-if="isMinor" class="minor-badge">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5 shrink-0">
+                <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clip-rule="evenodd" />
+              </svg>
+              <span class="minor-badge__shine" />
+              Menor de edad
+            </span>
+          </div>
           <p class="text-xs text-gray-400 font-mono mt-0.5">{{ id }}</p>
         </template>
       </div>
@@ -1286,6 +1314,25 @@ function setFaithAnswer(idx: number, val: boolean) {
                       class="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-amber-400 transition bg-white"
                     />
                   </div>
+                </div>
+
+                <!-- Firma del responsable 1 -->
+                <div class="space-y-2 pt-2 border-t border-amber-200">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="text-xs font-semibold text-amber-700 uppercase tracking-wide">
+                      Firma del responsable
+                    </span>
+                    <span v-if="guardian1Document" class="text-[10px] text-amber-600 font-medium">
+                      — Doc. {{ guardian1Document }}
+                    </span>
+                    <span v-if="guardianSignatureSaved" class="text-[10px] text-emerald-600 font-medium">
+                      ✓ guardada
+                    </span>
+                  </div>
+                  <p class="text-[11px] text-amber-600">
+                    El responsable debe firmar aquí para autorizar el bautismo del candidato menor de edad.
+                  </p>
+                  <SignaturePad v-model="guardianSignatureData" @saved="guardianSignatureSaved = true" />
                 </div>
 
                 <!-- Toggle responsable 2 -->
@@ -2600,6 +2647,44 @@ input[type='checkbox'].sr-only {
   position: fixed;
   top: 0;
   left: 0;
+}
+
+/* ── Menor de edad badge ───────────────────────────────────────────────────── */
+.minor-badge {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 12px 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #f97316, #ef4444);
+  overflow: hidden;
+  animation: minor-glow 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.minor-badge__shine {
+  position: absolute;
+  top: 0;
+  left: -75%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.45) 50%, transparent 100%);
+  animation: minor-shine 2.4s ease-in-out infinite;
+}
+
+@keyframes minor-glow {
+  0%, 100% { box-shadow: 0 0 6px 1px rgba(249,115,22,0.5); }
+  50%       { box-shadow: 0 0 14px 4px rgba(239,68,68,0.7); }
+}
+
+@keyframes minor-shine {
+  0%   { left: -75%; }
+  60%  { left: 130%; }
+  100% { left: 130%; }
 }
 
 .modal-enter-active,

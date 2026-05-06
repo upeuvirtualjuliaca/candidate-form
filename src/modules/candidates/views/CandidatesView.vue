@@ -63,6 +63,16 @@ function limaDate(dateStr: string): string {
   return limaDateTime(dateStr).slice(0, 10)
 }
 
+function isMinor(row: CandidateRow): boolean {
+  const birth = row.students?.birth_date ?? row.teachers?.birth_date
+  if (!birth) return false
+  const today = new Date()
+  const b = new Date(birth)
+  const age = today.getFullYear() - b.getFullYear() -
+    (today.getMonth() < b.getMonth() || (today.getMonth() === b.getMonth() && today.getDate() < b.getDate()) ? 1 : 0)
+  return age < 18
+}
+
 // ── List tab ───────────────────────────────────────────────────────────────
 
 const listLoading = ref(false)
@@ -465,8 +475,12 @@ watch(activeTab, (tab) => {
                       <p class="font-medium text-gray-800">
                         {{ toProperCase(row.students?.full_name ?? row.teachers?.full_name) }}
                       </p>
-                      <p class="text-xs text-gray-400 font-mono mt-0.5">
+                      <p class="text-xs text-gray-400 font-mono mt-0.5 flex items-center gap-1.5">
                         {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                        <span v-if="isMinor(row)"
+                          class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-600">
+                          Menor de edad
+                        </span>
                       </p>
                     </td>
                     <td class="py-3 pr-4">
@@ -746,8 +760,12 @@ watch(activeTab, (tab) => {
                         >{{ (listPage - 1) * listPageSize + i + 1 }}.</span
                       >{{ toProperCase(row.students?.full_name ?? row.teachers?.full_name) }}
                     </p>
-                    <p class="text-xs text-gray-400 font-mono">
+                    <p class="text-xs text-gray-400 font-mono flex items-center gap-1.5">
                       {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                      <span v-if="isMinor(row)"
+                        class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-orange-100 text-orange-600">
+                        Menor de edad
+                      </span>
                     </p>
                   </div>
                   <span
