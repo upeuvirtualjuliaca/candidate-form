@@ -52,6 +52,14 @@ const pdfPreviewUrl = ref<string | null>(null)
 const loadingPreview = ref(false)
 const saveMsg = ref('')
 const saveMsgError = ref(false)
+const showSavedToast = ref(false)
+let savedToastTimer: ReturnType<typeof setTimeout> | null = null
+
+function triggerSavedToast() {
+  if (savedToastTimer) clearTimeout(savedToastTimer)
+  showSavedToast.value = true
+  savedToastTimer = setTimeout(() => { showSavedToast.value = false }, 3500)
+}
 
 const candidate = ref<CandidateDetail | null>(null)
 
@@ -412,6 +420,7 @@ async function save() {
     savedSnap.value = buildSnap()
 
     saveMsg.value = 'Guardado correctamente.'
+    triggerSavedToast()
     setTimeout(() => {
       saveMsg.value = ''
     }, 2500)
@@ -512,7 +521,7 @@ async function executeDelete() {
   deleting.value = true
   try {
     await deleteCandidate(id)
-    await router.push('/candidates')
+    await router.push({ path: '/candidates', query: { deleted: '1' } })
   } finally {
     deleting.value = false
   }
@@ -2537,6 +2546,40 @@ function setFaithAnswer(idx: number, val: boolean) {
               </button>
             </div>
           </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- Toast: guardado exitosamente -->
+    <Teleport to="body">
+      <Transition
+        enter-active-class="transition duration-300 ease-out"
+        enter-from-class="opacity-0 translate-y-2"
+        enter-to-class="opacity-100 translate-y-0"
+        leave-active-class="transition duration-200 ease-in"
+        leave-from-class="opacity-100 translate-y-0"
+        leave-to-class="opacity-0 translate-y-2"
+      >
+        <div
+          v-if="showSavedToast"
+          style="
+            position:fixed;top:20px;right:20px;z-index:2147483647;
+            width:340px;padding:16px 18px;border-radius:14px;
+            background:#f0fdf4;border:1px solid #86efac;
+            box-shadow:0 10px 40px rgba(0,0,0,0.2);
+            display:flex;align-items:flex-start;gap:12px;
+            font-family:system-ui,sans-serif;cursor:pointer;
+          "
+          @click="showSavedToast = false"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#16a34a" style="width:22px;height:22px;flex-shrink:0;margin-top:1px">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+          </svg>
+          <div style="flex:1">
+            <p style="margin:0 0 4px;font-size:14px;font-weight:700;color:#14532d">Datos guardados correctamente</p>
+            <p style="margin:0;font-size:13px;color:#166534;line-height:1.45">La información de la ficha ha sido guardada en el sistema.</p>
+          </div>
+          <span style="color:#15803d;font-size:20px;line-height:1">&times;</span>
         </div>
       </Transition>
     </Teleport>

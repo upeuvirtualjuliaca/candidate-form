@@ -29,6 +29,8 @@ export interface CandidateRow {
     main_ep:   string | null
     campus:    string | null
   } | null
+  created_by:      string | null
+  created_by_name: string | null
 }
 
 export interface CandidateDetail {
@@ -197,7 +199,7 @@ export interface CompletionResult {
 // ── Candidate CRUD ─────────────────────────────────────────────────────────
 
 const CANDIDATE_LIST_SELECT = `
-  id, status, observations, created_at,
+  id, status, observations, created_at, created_by, created_by_name,
   identification_completed, conversion_completed, faith_completed, ceremony_data_completed,
   students ( id, dni, full_name, program, faculty, campus ),
   teachers ( id, dni, full_name, faculty, main_ep, campus )
@@ -216,17 +218,31 @@ export async function getCandidates(
     .from('candidates')
     .select(CANDIDATE_LIST_SELECT, { count: 'exact' })
     .order('created_at', { ascending: false })
-    .range(from, to)
 
   if (status) query = query.eq('status', status)
 
   if (search?.trim()) {
     const term = `%${search.trim()}%`
-    query = query.or(
-      `students.full_name.ilike.${term},students.dni.ilike.${term},students.student_code.ilike.${term},` +
-      `teachers.full_name.ilike.${term},teachers.dni.ilike.${term}`
-    )
+
+    const [{ data: studentMatches }, { data: teacherMatches }] = await Promise.all([
+      supabase.from('students').select('id').or(`full_name.ilike.${term},dni.ilike.${term},student_code.ilike.${term}`),
+      supabase.from('teachers').select('id').or(`full_name.ilike.${term},dni.ilike.${term}`),
+    ])
+
+    const studentIds = (studentMatches ?? []).map((s: { id: string }) => s.id)
+    const teacherIds = (teacherMatches ?? []).map((t: { id: string }) => t.id)
+
+    if (studentIds.length === 0 && teacherIds.length === 0) {
+      return { data: [], count: 0 }
+    }
+
+    const orParts: string[] = []
+    if (studentIds.length > 0) orParts.push(`student_id.in.(${studentIds.join(',')})`)
+    if (teacherIds.length > 0) orParts.push(`teacher_id.in.(${teacherIds.join(',')})`)
+    query = query.or(orParts.join(','))
   }
+
+  query = query.range(from, to)
 
   const { data, count, error } = await query
   if (error) throw error
@@ -274,13 +290,24 @@ export async function getCandidateIdByStudentId(studentId: string): Promise<stri
   return (data as { id: string } | null)?.id ?? null
 }
 
-export async function createCandidate(studentId: string): Promise<string> {
+export async function createCandidate(studentId: string, createdByName?: string | null): Promise<string> {
   const existing = await getCandidateIdByStudentId(studentId)
   if (existing) throw Object.assign(new Error('DUPLICATE'), { candidateId: existing })
 
+  let createdById: string | null = null
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    createdById = user?.id ?? null
+  } catch { /* ignorar */ }
+
   const { data, error } = await supabase
     .from('candidates')
-    .insert({ student_id: studentId, status: 'draft' })
+    .insert({
+      student_id:      studentId,
+      status:          'draft',
+      created_by:      createdById,
+      created_by_name: createdByName ?? null,
+    })
     .select('id')
     .single()
 

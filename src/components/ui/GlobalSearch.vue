@@ -5,6 +5,7 @@ import { searchStudents, searchLibre, createCandidateFromStudent, getCandidateMa
 import { searchTeachers, createCandidateFromTeacher, getCandidateMapForTeachers } from '@/modules/teachers/services/teachers.service'
 import { useToastStore } from '@/stores/toast'
 import { usePermissions } from '@/composables/usePermissions'
+import { supabase } from '@/core/supabase'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -167,18 +168,28 @@ async function goToFicha(r: SearchResult, closeDropdown = true) {
   navigating.value = true
   try {
     let candidateId: string
+    let isNew = false
     if (existingCandidateId.value) {
       candidateId = existingCandidateId.value
     } else if (r.type === 'teacher') {
       const res = await createCandidateFromTeacher(r.id)
       candidateId = res.id
+      isNew = !res.existed
     } else {
       const res = await createCandidateFromStudent(r.id)
       candidateId = res.id
+      isNew = !res.existed
+    }
+    // Guardar nombre del creador sin bloquear la navegación
+    if (isNew && currentUserName.value) {
+      supabase.from('candidates')
+        .update({ created_by_name: currentUserName.value })
+        .eq('id', candidateId)
+        .then(() => { /* silencioso */ })
     }
     if (closeDropdown) closeSearch()
     closeModal()
-    router.push(`/candidates/${candidateId}`)
+    router.push({ path: `/candidates/${candidateId}`, query: isNew ? { new: '1' } : {} })
   } catch {
     toast.error('No se pudo abrir la ficha')
   } finally {
@@ -239,9 +250,22 @@ function handleGlobal(e: KeyboardEvent) {
   }
 }
 
-onMounted(() => {
+const currentUserName = ref<string | null>(null)
+
+onMounted(async () => {
   document.addEventListener('mousedown', handleOutside)
   document.addEventListener('keydown', handleGlobal)
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('full_name, email')
+        .eq('id', user.id)
+        .maybeSingle()
+      currentUserName.value = profile?.full_name ?? profile?.email ?? user.email ?? null
+    }
+  } catch { /* ignorar */ }
 })
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleOutside)

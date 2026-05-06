@@ -17,10 +17,11 @@ import { Bar } from 'vue-chartjs'
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Filler)
 
 // ── Counters ────────────────────────────────────────────────────────────────
-const totalUsuarios   = ref(0)
-const fichasGeneradas = ref(0)
-const bautizados      = ref(0)
-const pendientes      = ref(0)
+const totalUsuarios        = ref(0)
+const fichasGeneradas      = ref(0)
+const bautizados           = ref(0)
+const pendientes           = ref(0)
+const bautismosConfirmados = ref(0)
 
 // ── Chart data ───────────────────────────────────────────────────────────────
 interface DayBucket { label: string; total: number; completed: number; draft: number }
@@ -114,7 +115,7 @@ function animateTo(target: Ref<number>, finalValue: number) {
 // ── Data fetch ───────────────────────────────────────────────────────────────
 onMounted(async () => {
   const [candidatesRes, studentsRes, teachersRes] = await Promise.all([
-    supabase.from('candidates').select('id, status, student_id, teacher_id, created_at'),
+    supabase.from('candidates').select('id, status, student_id, teacher_id, created_at, ceremony_completed'),
     supabase.from('students').select('id', { count: 'exact', head: true }),
     supabase.from('teachers').select('id', { count: 'exact', head: true }),
   ])
@@ -128,10 +129,13 @@ onMounted(async () => {
   const libres          = candidates.filter(c => !c.student_id && !c.teacher_id).length
   const totalUsers      = (studentsRes.count ?? 0) + (teachersRes.count ?? 0) + libres
 
-  animateTo(totalUsuarios,   totalUsers)
-  animateTo(fichasGeneradas, totalCandidates)
-  animateTo(bautizados,      totalCompleted)
-  animateTo(pendientes,      totalDraft)
+  const totalBautismos = candidates.filter(c => c.ceremony_completed === true).length
+
+  animateTo(totalUsuarios,        totalUsers)
+  animateTo(fichasGeneradas,      totalCandidates)
+  animateTo(bautizados,           totalCompleted)
+  animateTo(pendientes,           totalDraft)
+  animateTo(bautismosConfirmados, totalBautismos)
 
   // ── Build monthly buckets (all time)
   const bucketMap = new Map<string, DayBucket>()
@@ -164,7 +168,7 @@ onMounted(async () => {
     </div>
 
     <!-- Stats grid -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
 
       <!-- Total Usuarios -->
       <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
@@ -223,6 +227,21 @@ onMounted(async () => {
         <div>
           <p class="text-2xl font-bold text-gray-800 tabular-nums">{{ pendientes.toLocaleString() }}</p>
           <p class="text-xs text-gray-500 mt-0.5 uppercase tracking-wide font-medium">Fichas por completar</p>
+        </div>
+      </div>
+
+      <!-- Bautismos confirmados -->
+      <div class="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4">
+        <div class="w-11 h-11 rounded-xl bg-violet-500 flex items-center justify-center shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke-width="1.5" stroke="white" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M12 2.25c-3.75 6-7.5 8.25-7.5 12.75a7.5 7.5 0 0 0 15 0c0-4.5-3.75-6.75-7.5-12.75Z" />
+          </svg>
+        </div>
+        <div>
+          <p class="text-2xl font-bold text-gray-800 tabular-nums">{{ bautismosConfirmados.toLocaleString() }}</p>
+          <p class="text-xs text-gray-500 mt-0.5 uppercase tracking-wide font-medium">Bautismos</p>
         </div>
       </div>
 

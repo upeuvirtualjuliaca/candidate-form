@@ -7,18 +7,20 @@ import Tabs, { type Tab } from '@/components/ui/Tabs.vue'
 import {
   getCandidates,
   deleteCandidate,
+  createCandidate,
+  getCandidateIdByStudentId,
   type CandidateRow,
   type CandidateStatus,
 } from '@/modules/candidates/services/candidates.service'
 import { searchStudents, type Student } from '@/modules/students/services/students.service'
-import {
-  createCandidate,
-  getCandidateIdByStudentId,
-} from '@/modules/candidates/services/candidates.service'
+import { supabase } from '@/core/supabase'
 
 const router = useRouter()
 const toast = useToastStore()
 const { canWrite } = usePermissions()
+
+// Nombre del usuario actual (igual que ValidationView)
+const currentUserName = ref<string | null>(null)
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
@@ -37,6 +39,28 @@ function statusLabel(s: CandidateStatus) {
 }
 function statusClass(s: CandidateStatus) {
   return s === 'draft' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+}
+
+function toProperCase(str: string | null | undefined): string {
+  if (!str) return '—'
+  return str.replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+}
+
+function limaDateTime(dateStr: string): string {
+  // Fuerza lectura como UTC y aplica offset Lima (UTC-5)
+  const raw =
+    dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : dateStr.replace(' ', 'T') + 'Z'
+  const lima = new Date(new Date(raw).getTime() - 5 * 60 * 60 * 1000)
+  const dd = String(lima.getUTCDate()).padStart(2, '0')
+  const mm = String(lima.getUTCMonth() + 1).padStart(2, '0')
+  const yyyy = lima.getUTCFullYear()
+  const hh = String(lima.getUTCHours()).padStart(2, '0')
+  const min = String(lima.getUTCMinutes()).padStart(2, '0')
+  return `${dd}/${mm}/${yyyy} ${hh}:${min}`
+}
+
+function limaDate(dateStr: string): string {
+  return limaDateTime(dateStr).slice(0, 10)
 }
 
 // ── List tab ───────────────────────────────────────────────────────────────
@@ -61,13 +85,44 @@ async function loadList() {
   }
 }
 
-watch(listSearch, () => { listPage.value = 1; loadList() })
+watch(listSearch, () => {
+  listPage.value = 1
+  loadList()
+})
 
 const listTotalPages = () => Math.max(1, Math.ceil(listTotal.value / listPageSize.value))
 
 function listPages() {
   const total = listTotalPages()
   const cur = listPage.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | '...')[] = [1]
+  if (cur > 3) pages.push('...')
+  for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i)
+  if (cur < total - 2) pages.push('...')
+  pages.push(total)
+  return pages
+}
+
+const draftsTotalPages = () => Math.max(1, Math.ceil(draftsTotal.value / draftsPageSize.value))
+
+function draftsPages() {
+  const total = draftsTotalPages()
+  const cur = draftsPage.value
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | '...')[] = [1]
+  if (cur > 3) pages.push('...')
+  for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i)
+  if (cur < total - 2) pages.push('...')
+  pages.push(total)
+  return pages
+}
+
+const completedTotalPages = () => Math.max(1, Math.ceil(completedTotal.value / completedPageSize.value))
+
+function completedPages() {
+  const total = completedTotalPages()
+  const cur = completedPage.value
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
   const pages: (number | '...')[] = [1]
   if (cur > 3) pages.push('...')
@@ -87,13 +142,27 @@ async function executeDelete() {
     await deleteCandidate(listDeleteId.value)
     listDeleteId.value = null
     await Promise.all([loadList(), loadDrafts()])
+    router.replace({ query: { deleted: '1' } })
   } finally {
     listDeleting.value = false
   }
 }
 
 watch([listPage, listPageSize], loadList)
-onMounted(loadList)
+onMounted(async () => {
+  loadList()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (user) {
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('full_name, email')
+      .eq('id', user.id)
+      .maybeSingle()
+    currentUserName.value = profile?.full_name ?? profile?.email ?? user.email ?? null
+  }
+})
 
 // ── Drafts tab ─────────────────────────────────────────────────────────────
 
@@ -107,7 +176,12 @@ const draftsSearch = ref('')
 async function loadDrafts() {
   draftsLoading.value = true
   try {
-    const res = await getCandidates(draftsPage.value, draftsPageSize.value, 'draft', draftsSearch.value)
+    const res = await getCandidates(
+      draftsPage.value,
+      draftsPageSize.value,
+      'draft',
+      draftsSearch.value,
+    )
     draftsRows.value = res.data
     draftsTotal.value = res.count
   } finally {
@@ -116,7 +190,10 @@ async function loadDrafts() {
 }
 
 watch([draftsPage, draftsPageSize], loadDrafts)
-watch(draftsSearch, () => { draftsPage.value = 1; loadDrafts() })
+watch(draftsSearch, () => {
+  draftsPage.value = 1
+  loadDrafts()
+})
 
 // ── Completed tab ──────────────────────────────────────────────────────────
 
@@ -130,7 +207,12 @@ const completedSearch = ref('')
 async function loadCompleted() {
   completedLoading.value = true
   try {
-    const res = await getCandidates(completedPage.value, completedPageSize.value, 'completed', completedSearch.value)
+    const res = await getCandidates(
+      completedPage.value,
+      completedPageSize.value,
+      'completed',
+      completedSearch.value,
+    )
     completedRows.value = res.data
     completedTotal.value = res.count
   } finally {
@@ -139,7 +221,10 @@ async function loadCompleted() {
 }
 
 watch([completedPage, completedPageSize], loadCompleted)
-watch(completedSearch, () => { completedPage.value = 1; loadCompleted() })
+watch(completedSearch, () => {
+  completedPage.value = 1
+  loadCompleted()
+})
 
 // Load filtered tabs on first switch
 watch(activeTab, (tab) => {
@@ -211,7 +296,7 @@ async function handleCreate() {
       await router.push({ path: `/candidates/${existing}`, query: { dup: '1' } })
       return
     }
-    const id = await createCandidate(selectedStudent.value.id)
+    const id = await createCandidate(selectedStudent.value.id, currentUserName.value)
     await router.push(`/candidates/${id}`)
   } catch (e: unknown) {
     createError.value = e instanceof Error ? e.message : 'Error al crear la ficha.'
@@ -269,18 +354,39 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'list'" class="pt-2">
           <!-- Search -->
           <div class="relative mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-              stroke-width="1.5" stroke="#9ca3af"
-              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="#9ca3af"
+              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+              />
             </svg>
-            <input v-model="listSearch" type="text" placeholder="Buscar por nombre, DNI o código…"
-              class="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40 placeholder:text-gray-400" />
-            <button v-if="listSearch" @click="listSearch = ''"
-              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+            <input
+              v-model="listSearch"
+              type="text"
+              placeholder="Buscar por nombre, DNI o código…"
+              class="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40 placeholder:text-gray-400"
+            />
+            <button
+              v-if="listSearch"
+              @click="listSearch = ''"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                class="w-3.5 h-3.5"
+              >
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
               </svg>
             </button>
@@ -335,24 +441,33 @@ watch(activeTab, (tab) => {
                   <tr
                     class="text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100"
                   >
+                    <th class="text-left py-2 pr-3 font-semibold w-8">#</th>
                     <th class="text-left py-2 pr-4 font-semibold">Nombre</th>
                     <th class="text-left py-2 pr-4 font-semibold">Estado</th>
                     <th class="text-center py-2 pr-3 font-semibold">Identificación</th>
                     <th class="text-center py-2 pr-3 font-semibold">Conversión</th>
                     <th class="text-center py-2 pr-3 font-semibold">Declaración</th>
                     <th class="text-center py-2 pr-4 font-semibold">Ceremonia</th>
+                    <th class="text-left py-2 pr-4 font-semibold">Creado por</th>
                     <th class="py-2"></th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50">
                   <tr
-                    v-for="row in listRows"
+                    v-for="(row, i) in listRows"
                     :key="row.id"
                     class="hover:bg-gray-50 transition-colors group"
                   >
+                    <td class="py-3 pr-3 text-xs text-gray-400 font-medium">
+                      {{ (listPage - 1) * listPageSize + i + 1 }}
+                    </td>
                     <td class="py-3 pr-4">
-                      <p class="font-medium text-gray-800">{{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}</p>
-                      <p class="text-xs text-gray-400 font-mono mt-0.5">{{ row.students?.dni ?? row.teachers?.dni ?? '—' }}</p>
+                      <p class="font-medium text-gray-800">
+                        {{ toProperCase(row.students?.full_name ?? row.teachers?.full_name) }}
+                      </p>
+                      <p class="text-xs text-gray-400 font-mono mt-0.5">
+                        {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                      </p>
                     </td>
                     <td class="py-3 pr-4">
                       <span
@@ -451,43 +566,164 @@ watch(activeTab, (tab) => {
                     <td class="py-3 pr-3 text-center">
                       <span
                         class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs"
-                        :class="row.faith_completed ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'"
+                        :class="
+                          row.faith_completed
+                            ? 'bg-emerald-100 text-emerald-600'
+                            : 'bg-gray-100 text-gray-400'
+                        "
                       >
-                        <svg v-if="row.faith_completed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3 h-3">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        <svg
+                          v-if="row.faith_completed"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke-width="2.5"
+                          stroke="currentColor"
+                          class="w-3 h-3"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m4.5 12.75 6 6 9-13.5"
+                          />
                         </svg>
-                        <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        <svg
+                          v-else
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke-width="2"
+                          stroke="currentColor"
+                          class="w-3 h-3"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M6 18 18 6M6 6l12 12"
+                          />
                         </svg>
                       </span>
                     </td>
                     <td class="py-3 pr-4 text-center">
                       <span
                         class="inline-flex items-center justify-center w-5 h-5 rounded-full text-xs"
-                        :class="row.ceremony_data_completed ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-100 text-gray-400'"
+                        :class="
+                          row.ceremony_data_completed
+                            ? 'bg-emerald-100 text-emerald-600'
+                            : 'bg-gray-100 text-gray-400'
+                        "
                       >
-                        <svg v-if="row.ceremony_data_completed" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3 h-3">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                        <svg
+                          v-if="row.ceremony_data_completed"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke-width="2.5"
+                          stroke="currentColor"
+                          class="w-3 h-3"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="m4.5 12.75 6 6 9-13.5"
+                          />
                         </svg>
-                        <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3 h-3">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        <svg
+                          v-else
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke-width="2"
+                          stroke="currentColor"
+                          class="w-3 h-3"
+                        >
+                          <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            d="M6 18 18 6M6 6l12 12"
+                          />
                         </svg>
                       </span>
                     </td>
-                    <td class="py-3 text-right">
-                      <div class="flex items-center justify-end gap-2">
+                    <td class="py-3 pr-4">
+                      <p class="text-[10px] font-medium text-gray-500 truncate max-w-[120px]">
+                        {{ row.created_by_name ?? '' }}
+                      </p>
+                      <p class="text-[10px] text-gray-400 mt-0.5">
+                        {{ limaDateTime(row.created_at) }}
+                      </p>
+                    </td>
+                    <td class="py-3">
+                      <div class="flex items-center justify-end gap-1.5">
+                        <!-- Borrador → lápiz; Completado → ojo -->
                         <RouterLink
                           :to="`/candidates/${row.id}`"
-                          class="px-3 py-1 rounded-lg text-xs font-medium text-[#04395a] bg-blue-50 hover:bg-blue-100 transition-colors"
-                          >Ver ficha</RouterLink
+                          :class="
+                            row.status === 'draft'
+                              ? 'p-2 rounded-lg text-amber-600 bg-amber-50 hover:bg-amber-100 transition-colors'
+                              : 'p-2 rounded-lg text-[#04395a] bg-blue-50 hover:bg-blue-100 transition-colors'
+                          "
+                          :title="row.status === 'draft' ? 'Editar ficha' : 'Ver ficha'"
                         >
+                          <!-- Lápiz (borrador) -->
+                          <svg
+                            v-if="row.status === 'draft'"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                            class="w-4 h-4"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+                            />
+                          </svg>
+                          <!-- Ojo (completado) -->
+                          <svg
+                            v-else
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                            class="w-4 h-4"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.573-3.007-9.963-7.178Z"
+                            />
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                            />
+                          </svg>
+                        </RouterLink>
                         <button
                           v-if="canWrite && row.status !== 'completed'"
                           type="button"
                           @click="confirmDelete(row.id)"
-                          class="px-3 py-1 rounded-lg text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+                          class="p-2 rounded-lg text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
+                          title="Eliminar ficha"
                         >
-                          Eliminar
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                            class="w-4 h-4"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                            />
+                          </svg>
                         </button>
                       </div>
                     </td>
@@ -499,16 +735,20 @@ watch(activeTab, (tab) => {
             <!-- Cards (mobile) -->
             <div class="md:hidden space-y-2">
               <div
-                v-for="row in listRows"
+                v-for="(row, i) in listRows"
                 :key="row.id"
                 class="border border-gray-100 rounded-xl p-4 space-y-2"
               >
                 <div class="flex items-start justify-between gap-2">
                   <div>
                     <p class="text-sm font-semibold text-gray-800">
-                      {{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}
+                      <span class="text-gray-400 font-normal mr-1"
+                        >{{ (listPage - 1) * listPageSize + i + 1 }}.</span
+                      >{{ toProperCase(row.students?.full_name ?? row.teachers?.full_name) }}
                     </p>
-                    <p class="text-xs text-gray-400 font-mono">{{ row.students?.dni ?? row.teachers?.dni ?? '—' }}</p>
+                    <p class="text-xs text-gray-400 font-mono">
+                      {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                    </p>
                   </div>
                   <span
                     class="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
@@ -550,20 +790,80 @@ watch(activeTab, (tab) => {
                     {{ item.label }}
                   </span>
                 </div>
-                <div class="flex gap-2 pt-1">
-                  <RouterLink
-                    :to="`/candidates/${row.id}`"
-                    class="flex-1 text-center py-1.5 rounded-lg text-xs font-medium text-[#04395a] bg-blue-50"
-                    >Ver ficha</RouterLink
-                  >
-                  <button
-                    v-if="canWrite && row.status !== 'completed'"
-                    type="button"
-                    @click="confirmDelete(row.id)"
-                    class="flex-1 py-1.5 rounded-lg text-xs font-medium text-red-600 bg-red-50"
-                  >
-                    Eliminar
-                  </button>
+                <div class="flex items-center justify-between pt-1">
+                  <p class="text-[10px] text-gray-400 flex items-center gap-1 min-w-0">
+                    <span class="truncate max-w-[100px]">{{ row.created_by_name ?? '' }}</span>
+                    <span class="shrink-0">· {{ limaDate(row.created_at) }}</span>
+                  </p>
+                  <div class="flex gap-1.5">
+                    <RouterLink
+                      :to="`/candidates/${row.id}`"
+                      :class="
+                        row.status === 'draft'
+                          ? 'p-2 rounded-lg text-amber-600 bg-amber-50 hover:bg-amber-100 transition-colors'
+                          : 'p-2 rounded-lg text-[#04395a] bg-blue-50 hover:bg-blue-100 transition-colors'
+                      "
+                      :title="row.status === 'draft' ? 'Editar ficha' : 'Ver ficha'"
+                    >
+                      <svg
+                        v-if="row.status === 'draft'"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                        class="w-4 h-4"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+                        />
+                      </svg>
+                      <svg
+                        v-else
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                        class="w-4 h-4"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.573-3.007-9.963-7.178Z"
+                        />
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                        />
+                      </svg>
+                    </RouterLink>
+                    <button
+                      v-if="canWrite && row.status !== 'completed'"
+                      type="button"
+                      @click="confirmDelete(row.id)"
+                      class="p-2 rounded-lg text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
+                      title="Eliminar ficha"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                        class="w-4 h-4"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -576,28 +876,30 @@ watch(activeTab, (tab) => {
                 }}
                 de {{ listTotal }}
               </p>
-              <div class="flex items-center gap-1">
+              <div class="flex items-center gap-1.5">
                 <button
                   type="button"
                   :disabled="listPage === 1"
                   @click="listPage--"
-                  class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs"
+                  class="flex items-center gap-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
-                  ‹
+                  ← Ant.
                 </button>
                 <template v-for="p in listPages()" :key="String(p)">
                   <span
                     v-if="p === '...'"
-                    class="w-7 h-7 flex items-center justify-center text-gray-400 text-xs"
+                    class="w-10 h-10 flex items-center justify-center text-gray-400 text-sm"
                     >…</span
                   >
                   <button
                     v-else
                     type="button"
                     @click="listPage = p as number"
-                    class="w-7 h-7 flex items-center justify-center rounded-lg text-xs font-medium transition-colors"
+                    class="w-10 h-10 flex items-center justify-center rounded-xl text-sm font-medium transition-colors"
                     :class="
-                      listPage === p ? 'bg-[#04395a] text-white' : 'text-gray-600 hover:bg-gray-100'
+                      listPage === p
+                        ? 'bg-[#04395a] text-white'
+                        : 'text-gray-600 hover:bg-gray-100 border border-gray-200'
                     "
                   >
                     {{ p }}
@@ -607,9 +909,9 @@ watch(activeTab, (tab) => {
                   type="button"
                   :disabled="listPage === listTotalPages()"
                   @click="listPage++"
-                  class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-xs"
+                  class="flex items-center gap-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
-                  ›
+                  Sig. →
                 </button>
               </div>
             </div>
@@ -879,18 +1181,39 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'drafts'" class="pt-2">
           <!-- Search -->
           <div class="relative mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-              stroke-width="1.5" stroke="#9ca3af"
-              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="#9ca3af"
+              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+              />
             </svg>
-            <input v-model="draftsSearch" type="text" placeholder="Buscar por nombre, DNI o código…"
-              class="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40 placeholder:text-gray-400" />
-            <button v-if="draftsSearch" @click="draftsSearch = ''"
-              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+            <input
+              v-model="draftsSearch"
+              type="text"
+              placeholder="Buscar por nombre, DNI o código…"
+              class="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40 placeholder:text-gray-400"
+            />
+            <button
+              v-if="draftsSearch"
+              @click="draftsSearch = ''"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                class="w-3.5 h-3.5"
+              >
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
               </svg>
             </button>
@@ -931,42 +1254,82 @@ watch(activeTab, (tab) => {
                   <tr
                     class="text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100"
                   >
+                    <th class="text-left py-2 pr-3 font-semibold w-8">#</th>
                     <th class="text-left py-2 pr-4 font-semibold">Estudiante</th>
                     <th class="text-left py-2 pr-4 font-semibold">Programa</th>
-                    <th class="text-left py-2 pr-4 font-semibold">Creado</th>
+                    <th class="text-left py-2 pr-4 font-semibold">Creado por</th>
                     <th class="py-2"></th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50">
                   <tr
-                    v-for="row in draftsRows"
+                    v-for="(row, i) in draftsRows"
                     :key="row.id"
                     class="hover:bg-gray-50 transition-colors group"
                   >
+                    <td class="py-3 pr-3 text-xs text-gray-400 font-medium">
+                      {{ (draftsPage - 1) * draftsPageSize + i + 1 }}
+                    </td>
                     <td class="py-3 pr-4">
-                      <p class="font-medium text-gray-800">{{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}</p>
-                      <p class="text-xs text-gray-400 font-mono mt-0.5">{{ row.students?.dni ?? row.teachers?.dni ?? '—' }}</p>
+                      <p class="font-medium text-gray-800">
+                        {{ toProperCase(row.students?.full_name ?? row.teachers?.full_name) }}
+                      </p>
+                      <p class="text-xs text-gray-400 font-mono mt-0.5">
+                        {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                      </p>
                     </td>
                     <td class="py-3 pr-4 text-gray-500 text-xs">
                       {{ row.students?.program ?? row.teachers?.main_ep ?? '—' }}
                     </td>
-                    <td class="py-3 pr-4 text-gray-400 text-xs">
-                      {{ new Date(row.created_at).toLocaleDateString('es-PE') }}
+                    <td class="py-3 pr-4">
+                      <p class="text-[10px] font-medium text-gray-500 truncate max-w-[120px]">
+                        {{ row.created_by_name ?? '' }}
+                      </p>
+                      <p class="text-[10px] text-gray-400 mt-0.5">{{ limaDateTime(row.created_at) }}</p>
                     </td>
-                    <td class="py-3 text-right">
-                      <div class="flex items-center justify-end gap-2">
+                    <td class="py-3">
+                      <div class="flex items-center justify-end gap-1.5">
                         <RouterLink
                           :to="`/candidates/${row.id}`"
-                          class="px-3 py-1 rounded-lg text-xs font-medium text-[#04395a] bg-blue-50 hover:bg-blue-100 transition-colors"
-                          >Ver ficha</RouterLink
+                          class="p-2 rounded-lg text-amber-600 bg-amber-50 hover:bg-amber-100 transition-colors"
+                          title="Editar ficha"
                         >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                            class="w-4 h-4"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+                            />
+                          </svg>
+                        </RouterLink>
                         <button
                           v-if="canWrite"
                           type="button"
                           @click="confirmDelete(row.id)"
-                          class="px-3 py-1 rounded-lg text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors"
+                          class="p-2 rounded-lg text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
+                          title="Eliminar ficha"
                         >
-                          Eliminar
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                            class="w-4 h-4"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                            />
+                          </svg>
                         </button>
                       </div>
                     </td>
@@ -976,55 +1339,115 @@ watch(activeTab, (tab) => {
             </div>
             <div class="md:hidden space-y-2">
               <div
-                v-for="row in draftsRows"
+                v-for="(row, i) in draftsRows"
                 :key="row.id"
                 class="border border-amber-100 bg-amber-50/40 rounded-xl p-4"
               >
-                <RouterLink :to="`/candidates/${row.id}`" class="block">
-                  <p class="text-sm font-semibold text-gray-800">
-                    {{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}
+                <p class="text-sm font-semibold text-gray-800">
+                  <span class="text-gray-400 font-normal mr-1"
+                    >{{ (draftsPage - 1) * draftsPageSize + i + 1 }}.</span
+                  >{{ toProperCase(row.students?.full_name ?? row.teachers?.full_name) }}
+                </p>
+                <p class="text-xs text-gray-400 font-mono">
+                  {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                </p>
+                <p class="text-xs text-gray-500 mt-1">
+                  {{ row.students?.program ?? row.teachers?.main_ep ?? '—' }}
+                </p>
+                <div class="flex items-center justify-between mt-3">
+                  <p class="text-[10px] text-gray-400 flex items-center gap-1 min-w-0">
+                    <span class="truncate max-w-[100px]">{{ row.created_by_name ?? '' }}</span>
+                    <span class="shrink-0">· {{ limaDateTime(row.created_at) }}</span>
                   </p>
-                  <p class="text-xs text-gray-400 font-mono">{{ row.students?.dni ?? row.teachers?.dni ?? '—' }}</p>
-                  <p class="text-xs text-gray-500 mt-1">{{ row.students?.program ?? row.teachers?.main_ep ?? '—' }}</p>
-                </RouterLink>
-                <div class="flex gap-2 mt-3">
-                  <RouterLink
-                    :to="`/candidates/${row.id}`"
-                    class="flex-1 text-center py-1.5 rounded-lg text-xs font-medium text-[#04395a] bg-blue-50"
-                    >Ver ficha</RouterLink
-                  >
-                  <button
-                    v-if="canWrite"
-                    type="button"
-                    @click="confirmDelete(row.id)"
-                    class="flex-1 py-1.5 rounded-lg text-xs font-medium text-red-600 bg-red-50"
-                  >
-                    Eliminar
-                  </button>
+                  <div class="flex gap-1.5">
+                    <RouterLink
+                      :to="`/candidates/${row.id}`"
+                      class="p-2 rounded-lg text-amber-600 bg-amber-50 hover:bg-amber-100 transition-colors"
+                      title="Editar ficha"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                        class="w-4 h-4"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+                        />
+                      </svg>
+                    </RouterLink>
+                    <button
+                      v-if="canWrite"
+                      type="button"
+                      @click="confirmDelete(row.id)"
+                      class="p-2 rounded-lg text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
+                      title="Eliminar ficha"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                        class="w-4 h-4"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
+                        />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
             <!-- Drafts pagination -->
             <div class="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
               <p class="text-xs text-gray-400">
-                {{ draftsTotal }} borrador{{ draftsTotal !== 1 ? 'es' : '' }}
+                {{ (draftsPage - 1) * draftsPageSize + 1 }}–{{ Math.min(draftsPage * draftsPageSize, draftsTotal) }}
+                de {{ draftsTotal }}
               </p>
-              <div class="flex gap-1">
+              <div class="flex items-center gap-1.5">
                 <button
                   type="button"
                   :disabled="draftsPage === 1"
                   @click="draftsPage--"
-                  class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 text-xs"
+                  class="flex items-center gap-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
-                  ‹
+                  ← Ant.
                 </button>
+                <template v-for="p in draftsPages()" :key="String(p)">
+                  <span
+                    v-if="p === '...'"
+                    class="w-10 h-10 flex items-center justify-center text-gray-400 text-sm"
+                    >…</span
+                  >
+                  <button
+                    v-else
+                    type="button"
+                    @click="draftsPage = p as number"
+                    class="w-10 h-10 flex items-center justify-center rounded-xl text-sm font-medium transition-colors"
+                    :class="
+                      draftsPage === p
+                        ? 'bg-[#04395a] text-white'
+                        : 'text-gray-600 hover:bg-gray-100 border border-gray-200'
+                    "
+                  >
+                    {{ p }}
+                  </button>
+                </template>
                 <button
                   type="button"
-                  :disabled="draftsPage >= Math.ceil(draftsTotal / draftsPageSize)"
+                  :disabled="draftsPage === draftsTotalPages()"
                   @click="draftsPage++"
-                  class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 text-xs"
+                  class="flex items-center gap-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
-                  ›
+                  Sig. →
                 </button>
               </div>
             </div>
@@ -1035,18 +1458,39 @@ watch(activeTab, (tab) => {
         <div v-show="activeTab === 'completed'" class="pt-2">
           <!-- Search -->
           <div class="relative mb-3">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-              stroke-width="1.5" stroke="#9ca3af"
-              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none">
-              <path stroke-linecap="round" stroke-linejoin="round"
-                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="#9ca3af"
+              class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+              />
             </svg>
-            <input v-model="completedSearch" type="text" placeholder="Buscar por nombre, DNI o código…"
-              class="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40 placeholder:text-gray-400" />
-            <button v-if="completedSearch" @click="completedSearch = ''"
-              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+            <input
+              v-model="completedSearch"
+              type="text"
+              placeholder="Buscar por nombre, DNI o código…"
+              class="w-full pl-9 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40 placeholder:text-gray-400"
+            />
+            <button
+              v-if="completedSearch"
+              @click="completedSearch = ''"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+                class="w-3.5 h-3.5"
+              >
                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
               </svg>
             </button>
@@ -1085,74 +1529,164 @@ watch(activeTab, (tab) => {
                   <tr
                     class="text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100"
                   >
+                    <th class="text-left py-2 pr-3 font-semibold w-8">#</th>
                     <th class="text-left py-2 pr-4 font-semibold">Estudiante</th>
                     <th class="text-left py-2 pr-4 font-semibold">Programa</th>
-                    <th class="text-left py-2 pr-4 font-semibold">Completado</th>
+                    <th class="text-left py-2 pr-4 font-semibold">Creado por</th>
                     <th class="py-2"></th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50">
                   <tr
-                    v-for="row in completedRows"
+                    v-for="(row, i) in completedRows"
                     :key="row.id"
                     class="hover:bg-gray-50 transition-colors group"
                   >
+                    <td class="py-3 pr-3 text-xs text-gray-400 font-medium">
+                      {{ (completedPage - 1) * completedPageSize + i + 1 }}
+                    </td>
                     <td class="py-3 pr-4">
-                      <p class="font-medium text-gray-800">{{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}</p>
-                      <p class="text-xs text-gray-400 font-mono mt-0.5">{{ row.students?.dni ?? row.teachers?.dni ?? '—' }}</p>
+                      <p class="font-medium text-gray-800">
+                        {{ toProperCase(row.students?.full_name ?? row.teachers?.full_name) }}
+                      </p>
+                      <p class="text-xs text-gray-400 font-mono mt-0.5">
+                        {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                      </p>
                     </td>
                     <td class="py-3 pr-4 text-gray-500 text-xs">
                       {{ row.students?.program ?? row.teachers?.main_ep ?? '—' }}
                     </td>
-                    <td class="py-3 pr-4 text-gray-400 text-xs">
-                      {{ new Date(row.created_at).toLocaleDateString('es-PE') }}
+                    <td class="py-3 pr-4">
+                      <p class="text-[10px] font-medium text-gray-500 truncate max-w-[120px]">
+                        {{ row.created_by_name ?? '' }}
+                      </p>
+                      <p class="text-[10px] text-gray-400 mt-0.5">{{ limaDateTime(row.created_at) }}</p>
                     </td>
-                    <td class="py-3 text-right">
-                      <RouterLink
-                        :to="`/candidates/${row.id}`"
-                        class="px-3 py-1 rounded-lg text-xs font-medium text-[#04395a] bg-blue-50 hover:bg-blue-100 transition-colors"
-                        >Ver ficha</RouterLink
-                      >
+                    <td class="py-3">
+                      <div class="flex items-center justify-end">
+                        <RouterLink
+                          :to="`/candidates/${row.id}`"
+                          class="p-2 rounded-lg text-[#04395a] bg-blue-50 hover:bg-blue-100 transition-colors"
+                          title="Ver ficha"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke-width="1.5"
+                            stroke="currentColor"
+                            class="w-4 h-4"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.573-3.007-9.963-7.178Z"
+                            />
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                            />
+                          </svg>
+                        </RouterLink>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <div class="md:hidden space-y-2">
-              <RouterLink
-                v-for="row in completedRows"
+              <div
+                v-for="(row, i) in completedRows"
                 :key="row.id"
-                :to="`/candidates/${row.id}`"
-                class="block border border-emerald-100 bg-emerald-50/40 rounded-xl p-4"
+                class="border border-emerald-100 bg-emerald-50/40 rounded-xl p-4"
               >
                 <p class="text-sm font-semibold text-gray-800">
-                  {{ row.students?.full_name ?? row.teachers?.full_name ?? '—' }}
+                  <span class="text-gray-400 font-normal mr-1"
+                    >{{ (completedPage - 1) * completedPageSize + i + 1 }}.</span
+                  >{{ toProperCase(row.students?.full_name ?? row.teachers?.full_name) }}
                 </p>
-                <p class="text-xs text-gray-400 font-mono">{{ row.students?.dni ?? row.teachers?.dni ?? '—' }}</p>
-                <p class="text-xs text-gray-500 mt-1">{{ row.students?.program ?? row.teachers?.main_ep ?? '—' }}</p>
-              </RouterLink>
+                <p class="text-xs text-gray-400 font-mono">
+                  {{ row.students?.dni ?? row.teachers?.dni ?? '—' }}
+                </p>
+                <p class="text-xs text-gray-500 mt-1">
+                  {{ row.students?.program ?? row.teachers?.main_ep ?? '—' }}
+                </p>
+                <div class="flex items-center justify-between mt-3">
+                  <p class="text-[10px] text-gray-400 flex items-center gap-1 min-w-0">
+                    <span class="truncate max-w-[100px]">{{ row.created_by_name ?? '' }}</span>
+                    <span class="shrink-0">· {{ limaDateTime(row.created_at) }}</span>
+                  </p>
+                  <RouterLink
+                    :to="`/candidates/${row.id}`"
+                    class="p-2 rounded-lg text-[#04395a] bg-blue-50 hover:bg-blue-100 transition-colors"
+                    title="Ver ficha"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.5"
+                      stroke="currentColor"
+                      class="w-4 h-4"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.641 0-8.573-3.007-9.963-7.178Z"
+                      />
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                      />
+                    </svg>
+                  </RouterLink>
+                </div>
+              </div>
             </div>
             <!-- Completed pagination -->
             <div class="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
               <p class="text-xs text-gray-400">
-                {{ completedTotal }} completada{{ completedTotal !== 1 ? 's' : '' }}
+                {{ (completedPage - 1) * completedPageSize + 1 }}–{{ Math.min(completedPage * completedPageSize, completedTotal) }}
+                de {{ completedTotal }}
               </p>
-              <div class="flex gap-1">
+              <div class="flex items-center gap-1.5">
                 <button
                   type="button"
                   :disabled="completedPage === 1"
                   @click="completedPage--"
-                  class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 text-xs"
+                  class="flex items-center gap-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
-                  ‹
+                  ← Ant.
                 </button>
+                <template v-for="p in completedPages()" :key="String(p)">
+                  <span
+                    v-if="p === '...'"
+                    class="w-10 h-10 flex items-center justify-center text-gray-400 text-sm"
+                    >…</span
+                  >
+                  <button
+                    v-else
+                    type="button"
+                    @click="completedPage = p as number"
+                    class="w-10 h-10 flex items-center justify-center rounded-xl text-sm font-medium transition-colors"
+                    :class="
+                      completedPage === p
+                        ? 'bg-[#04395a] text-white'
+                        : 'text-gray-600 hover:bg-gray-100 border border-gray-200'
+                    "
+                  >
+                    {{ p }}
+                  </button>
+                </template>
                 <button
                   type="button"
-                  :disabled="completedPage >= Math.ceil(completedTotal / completedPageSize)"
+                  :disabled="completedPage === completedTotalPages()"
                   @click="completedPage++"
-                  class="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 text-xs"
+                  class="flex items-center gap-1 px-4 py-2.5 rounded-xl text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                 >
-                  ›
+                  Sig. →
                 </button>
               </div>
             </div>
