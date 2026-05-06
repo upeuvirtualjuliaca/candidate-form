@@ -172,6 +172,7 @@ const receivingChurch = ref('Fernando Stahl')
 const churchCity = ref('Juliaca - San Román')
 const administrativeMeetingDate = ref(new Date().toISOString().slice(0, 10))
 const ceremonyNotes = ref('')
+const ceremonyVoto = ref('18')
 const churchSecretary = ref('')
 
 async function loadPrincipalSecretary() {
@@ -353,7 +354,7 @@ async function loadDetail() {
     conversionDone.value = data.conversion_completed
     faithDone.value = data.faith_completed
     // Computed from form fields — ceremony_completed in DB is owned by validation view
-    ceremonyDone.value = !!(data.officiating_pastor?.trim() && data.ceremony_date)
+    ceremonyDone.value = !!(data.officiating_pastor?.trim() && data.ceremony_date && ceremonyVoto.value?.trim())
     status.value = data.status
 
     // Snapshot inicial (datos ya guardados en DB)
@@ -426,7 +427,7 @@ async function save() {
     conversionDone.value = result.conversion_completed
     faithDone.value = result.faith_completed
     // Computed from form fields — ceremony_completed in DB is owned by validation view
-    ceremonyDone.value = result.ceremony_data_completed
+    ceremonyDone.value = result.ceremony_data_completed && !!ceremonyVoto.value?.trim()
     status.value = result.status
 
     // Sync back to candidate ref for PDF
@@ -508,6 +509,7 @@ function buildPdfSnap(): CandidateDetail | null {
     church_city: churchCity.value || null,
     administrative_meeting_date: administrativeMeetingDate.value || null,
     ceremony_notes: ceremonyNotes.value || null,
+    ceremony_voto: ceremonyVoto.value || null,
   }
 }
 
@@ -2138,6 +2140,22 @@ function setFaithAnswer(idx: number, val: boolean) {
                     "
                     class="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-100 bg-gray-50 cursor-not-allowed"
                     :class="churchSecretary ? 'text-gray-700' : 'text-gray-400 italic'"
+                  />
+                </div>
+
+                <!-- Voto -->
+                <div>
+                  <label class="flex items-center gap-1 text-xs font-medium text-gray-500 mb-1.5">
+                    <FieldStatus :filled="!!ceremonyVoto" />
+                    Voto
+                  </label>
+                  <input
+                    v-model="ceremonyVoto"
+                    type="text"
+                    :disabled="!canWrite"
+                    placeholder="Número de voto"
+                    class="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                    :class="!canWrite ? 'cursor-not-allowed bg-gray-50 text-gray-500' : 'text-gray-800'"
                   />
                 </div>
               </div>

@@ -964,6 +964,36 @@ function drawFaithSection(ctx: FlowCtx, c: CandidateDetail): void {
     col4Y += rowH
   }
 
+  // ── Datos del responsable (solo si existe guardian_1_name) ─────────────────
+  const dataY   = col4StartY + col4Heights[0]!
+  const dataH   = col4Heights[1]! + col4Heights[2]!
+
+  if (v(c.guardian_1_name)) {
+    // Col 0 — Nombre del responsable
+    const nameLines = ctx.doc.splitTextToSize(v(c.guardian_1_name), COL4_W - 3) as string[]
+    ctx.doc.setFontSize(7)
+    ctx.doc.setFont('helvetica', 'normal')
+    ctx.doc.setTextColor(0, 0, 0)
+    ctx.doc.text(nameLines, SX + 1.5, dataY + 5)
+
+    // Col 1 — Documento de identificación
+    const docLines = ctx.doc.splitTextToSize(v(c.guardian_1_document), COL4_W - 3) as string[]
+    ctx.doc.setFontSize(7)
+    ctx.doc.text(docLines, SX + COL4_W + 1.5, dataY + 5)
+
+    // Col 2 — Firma del responsable 1 (solo en la primera fila de datos, 7mm)
+    const gSigX1    = SX + COL4_W * 2 + 2
+    const gSigX2    = SX + COL4_W * 3 - 2
+    const row1H     = col4Heights[1]!          // 7mm — primera fila de datos
+    const gSigLineY = dataY + row1H - 1.5      // línea al fondo de esa fila
+    if (c.guardian_signature_data) {
+      const imgW = gSigX2 - gSigX1
+      const imgH = row1H - 2                   // imagen ocupa la fila sin salir
+      ctx.doc.addImage(c.guardian_signature_data, 'PNG', gSigX1, dataY + 0.5, imgW, imgH)
+    }
+    ctx.doc.setLineWidth(0.1)
+  }
+
   // Col 4: celda combinada (3 filas → 18mm)
   ctx.doc.setFillColor(255, 255, 255)
   ctx.doc.rect(SX + 3 * COL4_W, col4StartY, COL4_W, col4MergedH, 'FD')
@@ -996,7 +1026,7 @@ function drawCeremonySection(ctx: FlowCtx, c: CandidateDetail, churchSecretary?:
   const STRIP_W   = 8
   const cx        = SX + STRIP_W
   const cw        = PW - STRIP_W  // 182mm
-  const rowHeights = [8, 8, 8, 8, 8] // 5 filas
+  const rowHeights = [8, 8, 8, 8] // 4 filas
   const gridStartY = ctx.y
   const totalH     = rowHeights.reduce((s, h) => s + h, 0)
 
@@ -1019,8 +1049,8 @@ function drawCeremonySection(ctx: FlowCtx, c: CandidateDetail, churchSecretary?:
         ctx.doc.setFillColor('#f1f2f2')
         ctx.doc.rect(cx + col * colW, ry, colW, h, 'FD')
       }
-    } else if (row === 3 || row === 4) {
-      // Filas 4+5: col 1+2 individuales, col 3 omitida (va en celda combinada filas 4+5)
+    } else if (row === 3) {
+      // Fila 4: col 1+2 individuales, col 3 omitida (va en celda combinada fila 4)
       for (let col = 0; col < 2; col++) {
         ctx.doc.setFillColor(255, 255, 255)
         ctx.doc.rect(cx + col * colW, ry, colW, h, 'FD')
@@ -1080,8 +1110,11 @@ function drawCeremonySection(ctx: FlowCtx, c: CandidateDetail, churchSecretary?:
       ctx.doc.setFont('helvetica', 'normal')
       ctx.doc.setFontSize(7)
       ctx.doc.setTextColor(0, 0, 0)
-      const adminDateStr = c.administrative_meeting_date
+      const adminDateBase = c.administrative_meeting_date
         ? new Date(c.administrative_meeting_date + 'T12:00:00').toLocaleDateString('en-US')
+        : ''
+      const adminDateStr = adminDateBase
+        ? `${adminDateBase} |Voto: ${c.ceremony_voto ?? ''}`
         : ''
       ctx.doc.text(adminDateStr, cx + 1.5, ry + h / 2 + 1.5)
 
@@ -1128,10 +1161,10 @@ function drawCeremonySection(ctx: FlowCtx, c: CandidateDetail, churchSecretary?:
     ry += h
   }
 
-  // Col 3, filas 4+5 combinadas: firma del secretario/a
+  // Col 3, filas 3+4 combinadas: firma del secretario/a
   const col3X     = cx + colW * 2
-  const merged2H  = rowHeights[3]! + rowHeights[4]!  // 16mm
-  const merged2Y  = gridStartY + rowHeights[0]! + rowHeights[1]! + rowHeights[2]!
+  const merged2H  = rowHeights[2]! + rowHeights[3]!  // 16mm
+  const merged2Y  = gridStartY + rowHeights[0]! + rowHeights[1]!
   ctx.doc.setFillColor(255, 255, 255)
   ctx.doc.rect(col3X, merged2Y, colW, merged2H, 'FD')
   const sigLine2Y = merged2Y + merged2H - 4

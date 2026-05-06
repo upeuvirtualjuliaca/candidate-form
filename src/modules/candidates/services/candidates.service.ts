@@ -71,6 +71,7 @@ export interface CandidateDetail {
   church_city:                   string | null
   administrative_meeting_date:   string | null
   ceremony_notes:                string | null
+  ceremony_voto:                 string | null
 
   // ── Conversión ──────────────────────────────────────────────
   conversion_date:               string | null
