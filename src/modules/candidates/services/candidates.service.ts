@@ -128,6 +128,11 @@ export interface CandidateDetail {
     faculty:          string | null
     main_ep:          string | null
     condition:        string | null
+    sex:              string | null
+    birth_date:       string | null
+    country:          string | null
+    phone:            string | null
+    email:            string | null
   } | null
 }
 
@@ -271,7 +276,8 @@ export async function getCandidateDetail(id: string): Promise<CandidateDetail> {
       ),
       teachers (
         id, dni, full_name, doc_type, academic_degree, dedication_regime,
-        labor_condition, campus, faculty, main_ep, condition
+        labor_condition, campus, faculty, main_ep, condition,
+        sex, birth_date, country, phone, email
       )
     `)
     .eq('id', id)

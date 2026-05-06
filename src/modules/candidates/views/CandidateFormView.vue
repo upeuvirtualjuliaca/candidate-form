@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { usePermissions } from '@/composables/usePermissions'
 import Tabs, { type Tab } from '@/components/ui/Tabs.vue'
@@ -26,7 +26,7 @@ import { getPrincipalActiveSecretary } from '@/modules/secretaries/services/secr
 
 const route = useRoute()
 const router = useRouter()
-const id = route.params['id'] as string
+const id = computed(() => route.params['id'] as string)
 const { canWrite } = usePermissions()
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
@@ -91,18 +91,18 @@ const person = computed(() => {
       id: c.teachers.id,
       dni: c.teachers.dni,
       full_name: c.teachers.full_name,
-      sex: null as string | null,
-      institutional_email: null as string | null,
-      phone: null as string | null,
+      sex: c.teachers.sex,
+      institutional_email: c.teachers.email,
+      phone: c.teachers.phone,
       program: c.teachers.main_ep,
       faculty: c.teachers.faculty,
       campus: c.teachers.campus,
       modality: c.teachers.dedication_regime,
       cycle: c.teachers.condition,
       group: c.teachers.academic_degree,
-      country: null as string | null,
+      country: c.teachers.country,
       postal_code: null as string | null,
-      birth_date: null as string | null,
+      birth_date: c.teachers.birth_date,
       religion: null as string | null,
     }
   return null
@@ -259,7 +259,7 @@ async function loadDetail() {
   loading.value = true
   loadError.value = null
   try {
-    const data = await getCandidateDetail(id)
+    const data = await getCandidateDetail(id.value)
     candidate.value = data
 
     // Identificación
@@ -349,10 +349,10 @@ async function loadDetail() {
   }
 }
 
-onMounted(() => {
+watch(id, () => {
   loadDetail()
   loadPrincipalSecretary()
-})
+}, { immediate: true })
 
 // ── Save ───────────────────────────────────────────────────────────────────
 
@@ -403,7 +403,7 @@ async function save() {
       signature_data: signatureData.value,
     }
 
-    const result = await saveCandidateForm(id, payload)
+    const result = await saveCandidateForm(id.value, payload)
     identificationDone.value = result.identification_completed
     conversionDone.value = result.conversion_completed
     faithDone.value = result.faith_completed
@@ -520,7 +520,7 @@ function closePreview() {
 async function executeDelete() {
   deleting.value = true
   try {
-    await deleteCandidate(id)
+    await deleteCandidate(id.value)
     await router.push({ path: '/candidates', query: { deleted: '1' } })
   } finally {
     deleting.value = false
