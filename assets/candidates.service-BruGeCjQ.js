@@ -22,6 +22,7 @@ import{t as e}from"./supabase-lAmEX98_.js";var t=`
       ),
       teachers (
         id, dni, full_name, doc_type, academic_degree, dedication_regime,
-        labor_condition, campus, faculty, main_ep, condition
+        labor_condition, campus, faculty, main_ep, condition,
+        sex, birth_date, country, phone, email
       )
     `).eq(`id`,t).single();if(r)throw r;return n}async function i(t){let{data:n}=await e.from(`candidates`).select(`id`).eq(`student_id`,t).maybeSingle();return n?.id??null}async function a(t,n){let r=await i(t);if(r)throw Object.assign(Error(`DUPLICATE`),{candidateId:r});let a=null;try{let{data:{user:t}}=await e.auth.getUser();a=t?.id??null}catch{}let{data:o,error:s}=await e.from(`candidates`).insert({student_id:t,status:`draft`,created_by:a,created_by_name:n??null}).select(`id`).single();if(s)throw s;return o.id}async function o(t,n){let r=!!(n.address?.trim()&&n.education_level),i=!!(n.biblical_instructor_1?.trim()&&n.how_knew_iasd?.trim()),a=!!(n.consent_accepted&&n.faith_answers&&Object.values(n.faith_answers).some(e=>e!==null)&&n.signature_data?.trim()),o=!!(n.officiating_pastor?.trim()&&n.ceremony_date?.trim()),s=r&&i&&a&&o?`completed`:`draft`,{error:c}=await e.from(`candidates`).update({...n,identification_completed:r,conversion_completed:i,faith_completed:a,ceremony_data_completed:o,status:s}).eq(`id`,t);if(c)throw c;return{identification_completed:r,conversion_completed:i,faith_completed:a,ceremony_completed:o,ceremony_data_completed:o,status:s}}async function s(t){let{error:n}=await e.from(`candidates`).delete().eq(`id`,t);if(n)throw n}export{n as a,i,s as n,o,r,a as t};
