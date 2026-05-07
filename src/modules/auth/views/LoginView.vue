@@ -55,14 +55,14 @@ async function handleLogin() {
         <!-- Logo -->
         <div class="flex flex-col items-center mb-8 select-none">
           <div class="logo-wrap mb-5">
-            <img :src="siloeLogo" alt="Siloé" class="logo-img" />
+            <img :src="siloeLogo" alt="Baptos" class="logo-img" />
             <!-- Gotas que gotean desde el borde inferior del logo -->
             <span class="drop drop-1" />
             <span class="drop drop-2" />
             <span class="drop drop-3" />
             <span class="drop drop-4" />
           </div>
-          <h1 class="text-2xl font-bold text-white tracking-tight">Siloé</h1>
+          <!-- <h1 class="text-2xl font-bold text-white tracking-tight">BAPTOS</h1> -->
         </div>
 
         <!-- Card -->
@@ -245,13 +245,13 @@ async function handleLogin() {
     >
       <div class="flex flex-col items-center select-none">
         <div class="logo-wrap mb-6">
-          <img :src="siloeLogo" alt="Siloé" class="logo-img" />
+          <img :src="siloeLogo" alt="Baptos" class="logo-img" />
           <span class="drop drop-1" />
           <span class="drop drop-2" />
           <span class="drop drop-3" />
           <span class="drop drop-4" />
         </div>
-        <h1 class="splash-title">Siloé</h1>
+        <h1 class="splash-title">Baptos</h1>
         <p class="splash-subtitle">Bienvenido al sistema</p>
         <p v-if="splashName" class="splash-name">{{ splashName.split(' ')[0] }}</p>
       </div>

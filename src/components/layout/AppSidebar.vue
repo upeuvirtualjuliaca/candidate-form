@@ -166,9 +166,9 @@ watch(() => route.path, syncOpenGroups)
   >
     <!-- Logo -->
     <div class="flex items-center gap-3 px-5 py-4 border-b border-white/10 shrink-0">
-      <img :src="siloeLogo" alt="Siloé" class="w-10 h-10 rounded-xl object-contain shrink-0" />
+      <img :src="siloeLogo" alt="Baptos" class="w-10 h-10 rounded-xl object-contain shrink-0" />
       <div class="leading-tight min-w-0">
-        <p class="text-sm font-bold tracking-wide text-white truncate">Siloé</p>
+        <p class="text-sm font-bold tracking-wide text-white truncate">BAPTOS</p>
         <p class="text-[10px] text-white/50 tracking-widest uppercase">Panel Administración</p>
       </div>
     </div>
