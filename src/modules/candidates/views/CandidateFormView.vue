@@ -20,7 +20,7 @@ import {
 } from '@/modules/candidates/constants/faithForm'
 import { generateCandidatePdf, previewCandidatePdf } from '@/modules/candidates/utils/candidatePdf'
 import { searchStudents, type Student } from '@/modules/students/services/students.service'
-import { searchPastors, type Pastor } from '@/modules/pastors/services/pastors.service'
+import { searchPastors, getPastorByProgramName, type Pastor } from '@/modules/pastors/services/pastors.service'
 import FieldStatus from '@/modules/candidates/components/FieldStatus.vue'
 import SignaturePad from '@/components/ui/SignaturePad.vue'
 import { getPrincipalActiveSecretary } from '@/modules/secretaries/services/secretaries.service'
@@ -293,6 +293,29 @@ async function loadDetail() {
     guardian2Document.value = data.guardian_2_document ?? ''
     showGuardian2.value = !!data.guardian_2_name
 
+    // Auto-rellenar responsable con el pastor de la escuela profesional
+    // Calculamos isMinor directo desde data (no desde el computed, que puede no haber re-evaluado aún)
+    const birthDateRaw = data.students?.birth_date ?? null
+    if (birthDateRaw && !guardian1Name.value && !guardian1Document.value) {
+      const today  = new Date()
+      const dob    = new Date(birthDateRaw)
+      const age    = today.getFullYear() - dob.getFullYear() -
+        (today < new Date(today.getFullYear(), dob.getMonth(), dob.getDate()) ? 1 : 0)
+      const isMinorFromData = age < 18
+
+      if (isMinorFromData) {
+        const program = data.students?.program ?? null
+        if (program) {
+          getPastorByProgramName(program).then((pastor) => {
+            if (pastor && !guardian1Name.value && !guardian1Document.value) {
+              guardian1Name.value     = pastor.full_name
+              guardian1Document.value = pastor.dni
+            }
+          }).catch(() => { /* silencioso si no hay pastor asignado */ })
+        }
+      }
+    }
+
     // Conversión
     biblicalInstructor1.value = data.biblical_instructor_1 ?? ''
     biblicalInstructor2.value = data.biblical_instructor_2 ?? ''
@@ -319,6 +342,7 @@ async function loadDetail() {
     administrativeMeetingDate.value =
       data.administrative_meeting_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
     ceremonyNotes.value = data.ceremony_notes ?? ''
+    ceremonyVoto.value  = data.ceremony_voto ?? '18'
     if (data.officiating_pastor) {
       pastorQuery.value = data.officiating_pastor
       if (data.officiating_pastor_dni) {
@@ -415,6 +439,7 @@ async function save() {
       church_city: churchCity.value || null,
       administrative_meeting_date: administrativeMeetingDate.value || null,
       ceremony_notes: ceremonyNotes.value || null,
+      ceremony_voto: ceremonyVoto.value || null,
       // Fe
       faith_answers: { ...faithAnswers.value },
       consent_accepted: consentAccepted.value,
@@ -906,6 +931,9 @@ function setFaithAnswer(idx: number, val: boolean) {
                     v-for="(row, i) in [
                       { label: 'DNI', value: person?.dni },
                       { label: 'Nombres completos', value: person?.full_name },
+                      ...(candidate?.students
+                        ? [{ label: 'EP', value: candidate.students.program }]
+                        : []),
                       {
                         label: 'Sexo',
                         value:

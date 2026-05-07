@@ -117,6 +117,59 @@ export async function searchPastors(params: {
   return ((data ?? []) as unknown as RawPastor[]).map(mapPastor)
 }
 
+// Busca el pastor asignado a una escuela profesional por nombre (flexible, case-insensitive).
+// Retorna { full_name, dni } o null si no hay pastor vinculado.
+export async function getPastorByProgramName(
+  programName: string,
+): Promise<{ full_name: string; dni: string } | null> {
+  if (!programName?.trim()) return null
+
+  // 1. Buscar el program_id — primero match exacto, si no hay, buscar por contenido
+  let prog: { id: string } | null = null
+
+  const { data: exact } = await supabase
+    .from('programs')
+    .select('id')
+    .ilike('name', programName.trim())
+    .maybeSingle()
+
+  if (exact) {
+    prog = exact as { id: string }
+  } else {
+    // Buscar por contenido (ej: "EP Ingeniería Civil" contiene "Ingeniería Civil")
+    const { data: fuzzy } = await supabase
+      .from('programs')
+      .select('id')
+      .ilike('name', `%${programName.trim()}%`)
+      .limit(1)
+    prog = ((fuzzy ?? []) as { id: string }[])[0] ?? null
+  }
+
+  if (!prog) return null
+
+  // 2. Buscar el pastor vinculado a ese program_id (puede haber más de uno, tomamos el primero)
+  const { data: links, error: linkError } = await supabase
+    .from('pastor_programs')
+    .select('pastor_id')
+    .eq('program_id', (prog as { id: string }).id)
+    .limit(1)
+
+  if (linkError || !links || links.length === 0) return null
+  const link = (links as { pastor_id: string }[])[0]!
+
+  // 3. Obtener nombre y DNI del pastor
+  const { data: pastor, error: pastorError } = await supabase
+    .from('pastors')
+    .select('full_name, dni')
+    .eq('id', (link as { pastor_id: string }).pastor_id)
+    .maybeSingle()
+
+  if (pastorError || !pastor) return null
+
+  const p = pastor as { full_name: string; dni: string }
+  return { full_name: p.full_name, dni: p.dni }
+}
+
 export async function getPastorDetail(id: string): Promise<Pastor> {
   const { data, error } = await supabase
     .from('pastors')

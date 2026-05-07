@@ -175,6 +175,7 @@ export interface CandidateFormPayload {
   church_city?:                 string | null
   administrative_meeting_date?: string | null
   ceremony_notes?:              string | null
+  ceremony_voto?:               string | null
   // Conversión
   conversion_date?:            string | null
   conversion_place?:           string | null
@@ -227,6 +228,7 @@ export async function getCandidates(
   let query = supabase
     .from('candidates')
     .select(CANDIDATE_LIST_SELECT, { count: 'exact' })
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
 
   if (status) query = query.eq('status', status)
@@ -269,7 +271,7 @@ export async function getCandidateDetail(id: string): Promise<CandidateDetail> {
       church, pastor, baptism_date, identification_observations,
       guardian_1_name, guardian_1_document, guardian_2_name, guardian_2_document,
       ceremony_date, ceremony_place, officiating_pastor, officiating_pastor_dni,
-      receiving_church, church_city, administrative_meeting_date, ceremony_notes,
+      receiving_church, church_city, administrative_meeting_date, ceremony_notes, ceremony_voto,
       conversion_date, conversion_place, influential_person, spiritual_experience, conversion_observations,
       biblical_instructor_1, biblical_instructor_2, previous_religion,
       how_knew_iasd, how_studied_bible, decisive_factor,
@@ -289,7 +291,9 @@ export async function getCandidateDetail(id: string): Promise<CandidateDetail> {
     .single()
 
   if (error) throw error
-  return data as unknown as CandidateDetail
+  const row = data as unknown as CandidateDetail & { deleted_at?: string | null }
+  if (row.deleted_at) throw new Error('CANDIDATE_DELETED')
+  return row as CandidateDetail
 }
 
 export async function getCandidateIdByStudentId(studentId: string): Promise<string | null> {
@@ -297,6 +301,7 @@ export async function getCandidateIdByStudentId(studentId: string): Promise<stri
     .from('candidates')
     .select('id')
     .eq('student_id', studentId)
+    .is('deleted_at', null)
     .maybeSingle()
   return (data as { id: string } | null)?.id ?? null
 }
@@ -380,7 +385,10 @@ export async function saveCandidateForm(
 }
 
 export async function deleteCandidate(id: string): Promise<void> {
-  const { error } = await supabase.from('candidates').delete().eq('id', id)
+  const { error } = await supabase
+    .from('candidates')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id)
   if (error) throw error
 }
 
