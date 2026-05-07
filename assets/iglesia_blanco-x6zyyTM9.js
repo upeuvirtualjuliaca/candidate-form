@@ -1,1 +1,0 @@
-var e=`/candidate-form/assets/siloe-Bj1SqGLd.png`,t=`/candidate-form/assets/iglesia_blanco-CW753wMb.png`;export{e as n,t};
