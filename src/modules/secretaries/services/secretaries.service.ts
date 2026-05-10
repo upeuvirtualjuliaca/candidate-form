@@ -3,15 +3,16 @@ import { supabase } from '@/core/supabase'
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface Secretary {
-  id:           string
-  dni:          string
-  full_name:    string
-  phone:        string | null
-  church_name:  string | null
-  role:         'principal' | 'asociada'
-  is_active:    boolean
-  is_historical: boolean
-  created_at:   string
+  id:             string
+  dni:            string
+  full_name:      string
+  phone:          string | null
+  church_name:    string | null
+  role:           'principal' | 'asociada'
+  is_active:      boolean
+  is_historical:  boolean
+  signature_data: string | null
+  created_at:     string
 }
 
 export interface PaginatedSecretaries {
@@ -19,7 +20,7 @@ export interface PaginatedSecretaries {
   count: number
 }
 
-const SECRETARY_SELECT = `id, dni, full_name, phone, church_name, role, is_active, is_historical, created_at`
+const SECRETARY_SELECT = `id, dni, full_name, phone, church_name, role, is_active, is_historical, signature_data, created_at`
 
 // ── CRUD ───────────────────────────────────────────────────────────────────
 
@@ -170,4 +171,16 @@ export async function deleteSecretary(id: string): Promise<void> {
 
   const { error } = await supabase.from('secretaries').delete().eq('id', id)
   if (error) throw error
+}
+
+export async function saveSecretarySignature(id: string, signature_data: string | null): Promise<Secretary> {
+  const { data, error } = await supabase
+    .from('secretaries')
+    .update({ signature_data })
+    .eq('id', id)
+    .select(SECRETARY_SELECT)
+    .single()
+
+  if (error) throw error
+  return data as Secretary
 }

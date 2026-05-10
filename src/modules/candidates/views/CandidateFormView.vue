@@ -166,19 +166,22 @@ const guardianSignatureSaved = ref(false)
 const todayStr = new Date().toISOString().slice(0, 10)
 const ceremonyDate = ref(todayStr)
 const ceremonyPlace = ref('Fernando Stahl')
-const officatingPastor = ref('')
-const officatingPastorDni = ref('')
+const officatingPastor          = ref('')
+const officatingPastorDni       = ref('')
+const officatingPastorSignature = ref<string | null>(null)
 const receivingChurch = ref('Fernando Stahl')
 const churchCity = ref('Juliaca - San Román')
 const administrativeMeetingDate = ref(new Date().toISOString().slice(0, 10))
 const ceremonyNotes = ref('')
 const ceremonyVoto = ref('18')
-const churchSecretary = ref('')
+const churchSecretary          = ref('')
+const churchSecretarySignature = ref<string | null>(null)
 
 async function loadPrincipalSecretary() {
   try {
     const sec = await getPrincipalActiveSecretary()
-    churchSecretary.value = sec?.full_name ?? ''
+    churchSecretary.value          = sec?.full_name      ?? ''
+    churchSecretarySignature.value = sec?.signature_data ?? null
   } catch {
     // no bloquea el formulario si falla
   }
@@ -209,18 +212,20 @@ async function onPastorInput() {
 }
 
 function selectPastor(p: Pastor) {
-  selectedPastor.value = p
-  officatingPastor.value = p.full_name
-  officatingPastorDni.value = p.dni
+  selectedPastor.value         = p
+  officatingPastor.value       = p.full_name
+  officatingPastorDni.value    = p.dni
+  officatingPastorSignature.value = p.signature_data ?? null
   pastorQuery.value = p.full_name
   showPastorDrop.value = false
   pastorSuggestions.value = []
 }
 
 function clearPastorSelection() {
-  selectedPastor.value = null
-  officatingPastor.value = ''
-  officatingPastorDni.value = ''
+  selectedPastor.value            = null
+  officatingPastor.value          = ''
+  officatingPastorDni.value       = ''
+  officatingPastorSignature.value = null
   pastorQuery.value = ''
   pastorSuggestions.value = []
 }
@@ -352,9 +357,14 @@ async function loadDetail() {
           dni: data.officiating_pastor_dni,
           full_name: data.officiating_pastor,
           phone: null,
+          signature_data: null,
           created_at: '',
           programs: [],
         }
+        // Cargar firma del pastor desde el catálogo
+        searchPastors({ dni: data.officiating_pastor_dni }).then((results) => {
+          officatingPastorSignature.value = results[0]?.signature_data ?? null
+        }).catch(() => {})
       }
     }
 
@@ -493,7 +503,7 @@ async function handleGeneratePdf() {
   generatingPdf.value = true
   try {
     const snap = buildPdfSnap()
-    if (snap) generateCandidatePdf(snap, { churchSecretary: churchSecretary.value })
+    if (snap) generateCandidatePdf(snap, { churchSecretary: churchSecretary.value, churchSecretarySignature: churchSecretarySignature.value, officiantPastorSignature: officatingPastorSignature.value })
   } catch (err) {
     console.error('[PDF] Error al generar:', err)
     saveMsg.value = 'Error al generar el PDF. Revisa la consola del navegador.'
@@ -544,7 +554,7 @@ async function handleShowPreview() {
   loadingPreview.value = true
   try {
     if (pdfPreviewUrl.value) URL.revokeObjectURL(pdfPreviewUrl.value)
-    pdfPreviewUrl.value = previewCandidatePdf(snap, { churchSecretary: churchSecretary.value })
+    pdfPreviewUrl.value = previewCandidatePdf(snap, { churchSecretary: churchSecretary.value, churchSecretarySignature: churchSecretarySignature.value, officiantPastorSignature: officatingPastorSignature.value })
     showPreview.value = true
   } catch (err) {
     console.error('[PDF] Error en preview:', err)

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import Tabs, { type Tab } from '@/components/ui/Tabs.vue'
+import SignaturePad from '@/components/ui/SignaturePad.vue'
 import {
   getSecretaries,
   searchSecretaries,
@@ -8,6 +9,7 @@ import {
   updateSecretary,
   toggleSecretaryActive,
   deleteSecretary,
+  saveSecretarySignature,
   type Secretary,
 } from '../services/secretaries.service'
 
@@ -242,6 +244,54 @@ async function executeDelete() {
     deleteDeleting.value = false
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SIGNATURE MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+const sigOpen      = ref(false)
+const sigSecretary = ref<Secretary | null>(null)
+const sigData      = ref<string | null>(null)
+const sigDirty     = ref(false)   // true cuando el usuario modificó el pad
+const sigSaving    = ref(false)
+const sigError     = ref('')
+const sigSaved     = ref(false)
+
+function openSignature(sec: Secretary) {
+  sigSecretary.value = sec
+  sigData.value      = sec.signature_data ?? null
+  sigDirty.value     = false
+  sigError.value     = ''
+  sigSaved.value     = false
+  sigOpen.value      = true
+}
+
+watch(sigData, () => { sigDirty.value = true })
+
+async function handleSaveSignature() {
+  if (!sigSecretary.value) return
+  sigError.value = ''
+  sigSaved.value = false
+  sigSaving.value = true
+  try {
+    const updated = await saveSecretarySignature(sigSecretary.value.id, sigData.value)
+    // Sincronizar en listado y búsqueda
+    const syncRow = (arr: Secretary[]) => {
+      const idx = arr.findIndex((s) => s.id === updated.id)
+      if (idx !== -1) arr.splice(idx, 1, updated)
+    }
+    syncRow(listRows.value)
+    syncRow(searchResults.value)
+    sigSecretary.value = updated
+    sigDirty.value = false
+    sigSaved.value = true
+    setTimeout(() => { sigSaved.value = false }, 2500)
+  } catch (err) {
+    sigError.value = (err as any)?.message || 'Error al guardar la firma.'
+  } finally {
+    sigSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -360,8 +410,14 @@ async function executeDelete() {
                       <span class="text-xs text-amber-600 italic px-1">Solo lectura</span>
                     </template>
                     <template v-else>
-                      <button type="button" @click="openEdit(sec)" class="p-1.5 rounded-lg text-gray-400 hover:text-[#04395a] hover:bg-white transition-colors" title="Editar">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
+                      <button type="button" @click="openSignature(sec)"
+                        class="p-1.5 rounded-lg transition-colors"
+                        :class="sec.signature_data ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:text-[#04395a] hover:bg-white'"
+                        :title="sec.signature_data ? 'Ver / editar firma' : 'Agregar firma'">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487 18.55 2.8a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" /></svg>
+                      </button>
+                      <button type="button" @click="openEdit(sec)" class="p-1.5 rounded-lg text-amber-600 bg-amber-50 hover:bg-amber-100 transition-colors" title="Editar datos">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
                       </button>
                       <button type="button" @click="confirmDelete(sec.id)" class="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Eliminar">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
@@ -392,8 +448,14 @@ async function executeDelete() {
                     <div class="flex flex-col gap-1 items-end shrink-0">
                       <template v-if="!sec.is_historical">
                         <div class="flex gap-1">
-                          <button type="button" @click="openEdit(sec)" class="p-1.5 rounded-lg text-gray-400 hover:text-[#04395a] hover:bg-white transition-colors">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125" /></svg>
+                          <button type="button" @click="openSignature(sec)"
+                            class="p-1.5 rounded-lg transition-colors"
+                            :class="sec.signature_data ? 'text-emerald-600 hover:bg-emerald-50' : 'text-gray-400 hover:text-[#04395a] hover:bg-white'"
+                            :title="sec.signature_data ? 'Ver / editar firma' : 'Agregar firma'">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487 18.55 2.8a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" /></svg>
+                          </button>
+                          <button type="button" @click="openEdit(sec)" class="p-1.5 rounded-lg text-amber-600 bg-amber-50 hover:bg-amber-100 transition-colors" title="Editar datos">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
                           </button>
                           <button type="button" @click="confirmDelete(sec.id)" class="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" /></svg>
@@ -580,7 +642,7 @@ async function executeDelete() {
                       <span v-if="sec.church_name" class="text-xs font-medium text-[#04395a]">{{ sec.church_name }}</span>
                     </div>
                   </div>
-                  <div class="flex items-center gap-1.5 shrink-0">
+                  <div class="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                     <template v-if="sec.is_historical">
                       <span class="text-xs text-amber-600 italic">Solo lectura</span>
                     </template>
@@ -590,7 +652,16 @@ async function executeDelete() {
                         :class="sec.is_active ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100' : 'text-gray-500 bg-gray-100 hover:bg-gray-200'">
                         {{ sec.is_active ? 'Deshabilitar' : 'Habilitar' }}
                       </button>
-                      <button type="button" @click="openEdit(sec)" class="px-3 py-1.5 rounded-lg text-xs font-medium text-[#04395a] bg-[#04395a]/8 hover:bg-[#04395a]/15 transition-colors">Editar</button>
+                      <button type="button" @click="openSignature(sec)"
+                        class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                        :class="sec.signature_data ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100' : 'text-[#04395a] bg-[#04395a]/8 hover:bg-[#04395a]/15'">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487 18.55 2.8a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" /></svg>
+                        {{ sec.signature_data ? 'Ver firma' : 'Firma' }}
+                      </button>
+                      <button type="button" @click="openEdit(sec)" class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3 h-3"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>
+                        Editar datos
+                      </button>
                       <button type="button" @click="confirmDelete(sec.id)" class="px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 transition-colors">Eliminar</button>
                     </template>
                   </div>
@@ -714,6 +785,60 @@ async function executeDelete() {
               {{ deleteDeleting ? 'Eliminando…' : 'Eliminar' }}
             </button>
           </div>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
+
+  <!-- ════════════════════════════════════════════════════════════════════════
+       SIGNATURE MODAL
+  ════════════════════════════════════════════════════════════════════════ -->
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="sigOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4" @click.self="sigOpen = false">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" @click="sigOpen = false" />
+        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden">
+
+          <!-- Header -->
+          <div class="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+            <div>
+              <h3 class="text-base font-bold text-[#04395a]">Firma de secretaria</h3>
+              <p class="text-xs text-gray-400 mt-0.5">{{ sigSecretary?.full_name || '' }}</p>
+            </div>
+            <button type="button" @click="sigOpen = false" class="p-2 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="px-6 py-5 space-y-4">
+            <p class="text-xs text-gray-500">
+              Dibuja la firma en el recuadro. Cuando estés conforme presiona
+              <strong class="text-[#04395a]">Guardar firma</strong> y luego
+              <strong class="text-[#04395a]">Guardar en sistema</strong>.
+            </p>
+
+            <SignaturePad v-model="sigData" />
+
+            <p v-if="sigError" class="text-xs text-red-500">{{ sigError }}</p>
+            <Transition name="fade">
+              <p v-if="sigSaved" class="text-xs text-emerald-600 font-medium flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                Firma guardada correctamente.
+              </p>
+            </Transition>
+          </div>
+
+          <!-- Footer -->
+          <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-2 shrink-0">
+            <button type="button" @click="sigOpen = false" class="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors">Cerrar</button>
+            <button type="button" :disabled="sigSaving || !sigDirty" @click="handleSaveSignature"
+              class="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-medium text-white bg-[#04395a] hover:bg-[#068ab8] disabled:opacity-50 transition-colors">
+              <svg v-if="sigSaving" class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+              {{ sigSaving ? 'Guardando…' : 'Guardar en sistema' }}
+            </button>
+          </div>
+
         </div>
       </div>
     </Transition>

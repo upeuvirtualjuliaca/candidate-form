@@ -1022,7 +1022,7 @@ function drawFaithSection(ctx: FlowCtx, c: CandidateDetail): void {
 
 // ── SECTION 4: CEREMONIA ──────────────────────────────────────────────────────
 
-function drawCeremonySection(ctx: FlowCtx, c: CandidateDetail, churchSecretary?: string): void {
+function drawCeremonySection(ctx: FlowCtx, c: CandidateDetail, churchSecretary?: string, churchSecretarySignature?: string | null, officiantPastorSignature?: string | null): void {
   const STRIP_W   = 8
   const cx        = SX + STRIP_W
   const cw        = PW - STRIP_W  // 182mm
@@ -1168,6 +1168,12 @@ function drawCeremonySection(ctx: FlowCtx, c: CandidateDetail, churchSecretary?:
   ctx.doc.setFillColor(255, 255, 255)
   ctx.doc.rect(col3X, merged2Y, colW, merged2H, 'FD')
   const sigLine2Y = merged2Y + merged2H - 4
+  // Imagen de firma del secretario/a (si existe)
+  if (churchSecretarySignature) {
+    const imgW = colW - 6
+    const imgH = sigLine2Y - merged2Y - 1
+    ctx.doc.addImage(churchSecretarySignature, 'PNG', col3X + 3, merged2Y + 0.5, imgW, imgH)
+  }
   ctx.doc.setDrawColor(0, 0, 0)
   ctx.doc.setLineWidth(0.3)
   ctx.doc.line(col3X + 3, sigLine2Y, col3X + colW - 3, sigLine2Y)
@@ -1183,6 +1189,12 @@ function drawCeremonySection(ctx: FlowCtx, c: CandidateDetail, churchSecretary?:
   ctx.doc.setFillColor('#f1f2f2')
   ctx.doc.rect(col3X, gridStartY, colW, mergedH, 'FD')
   const sigLineY = gridStartY + mergedH - 4
+  // Imagen de firma del pastor oficante (si existe)
+  if (officiantPastorSignature) {
+    const imgW = colW - 6
+    const imgH = sigLineY - gridStartY - 1
+    ctx.doc.addImage(officiantPastorSignature, 'PNG', col3X + 3, gridStartY + 0.5, imgW, imgH)
+  }
   ctx.doc.setDrawColor(0, 0, 0)
   ctx.doc.setLineWidth(0.3)
   ctx.doc.line(col3X + 3, sigLineY, col3X + colW - 3, sigLineY)
@@ -1227,7 +1239,7 @@ function drawSignatures(ctx: FlowCtx): void {
 
 // ── BUILD (shared) ────────────────────────────────────────────────────────────
 
-function buildDoc(candidate: CandidateDetail, opts?: { churchSecretary?: string }): jsPDF {
+function buildDoc(candidate: CandidateDetail, opts?: { churchSecretary?: string; churchSecretarySignature?: string | null; officiantPastorSignature?: string | null }): jsPDF {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pageH = doc.internal.pageSize.getHeight()
 
@@ -1239,7 +1251,7 @@ function buildDoc(candidate: CandidateDetail, opts?: { churchSecretary?: string 
   const ctx: FlowCtx = { doc, y, pageH }
   drawConversionSection(ctx, candidate)
   drawFaithSection(ctx, candidate)
-  drawCeremonySection(ctx, candidate, opts?.churchSecretary)
+  drawCeremonySection(ctx, candidate, opts?.churchSecretary, opts?.churchSecretarySignature, opts?.officiantPastorSignature)
   return doc
 }
 
@@ -1248,7 +1260,7 @@ function buildDoc(candidate: CandidateDetail, opts?: { churchSecretary?: string 
 /** Download the PDF directly to the browser. */
 export function generateCandidatePdf(
   candidate: CandidateDetail,
-  opts?: { churchSecretary?: string },
+  opts?: { churchSecretary?: string; churchSecretarySignature?: string | null; officiantPastorSignature?: string | null },
 ): void {
   const doc = buildDoc(candidate, opts)
   const name = candidate.students?.full_name?.replace(/\s+/g, '_') ?? 'candidato'
@@ -1261,7 +1273,7 @@ export function generateCandidatePdf(
  */
 export function previewCandidatePdf(
   candidate: CandidateDetail,
-  opts?: { churchSecretary?: string },
+  opts?: { churchSecretary?: string; churchSecretarySignature?: string | null; officiantPastorSignature?: string | null },
 ): string {
   const doc = buildDoc(candidate, opts)
   return doc.output('bloburl') as unknown as string

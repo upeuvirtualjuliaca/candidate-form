@@ -14,12 +14,13 @@ export interface Program {
 }
 
 export interface Pastor {
-  id:        string
-  dni:       string
-  full_name: string
-  phone:     string | null
-  created_at: string
-  programs:  Program[]
+  id:             string
+  dni:            string
+  full_name:      string
+  phone:          string | null
+  signature_data: string | null
+  created_at:     string
+  programs:       Program[]
 }
 
 export interface PaginatedPastors {
@@ -30,11 +31,12 @@ export interface PaginatedPastors {
 // ── Internal Supabase response helpers ─────────────────────────────────────
 
 type RawPastor = {
-  id:        string
-  dni:       string
-  full_name: string
-  phone:     string | null
-  created_at: string
+  id:             string
+  dni:            string
+  full_name:      string
+  phone:          string | null
+  signature_data: string | null
+  created_at:     string
   pastor_programs: {
     programs: {
       id:       string
@@ -46,11 +48,12 @@ type RawPastor = {
 
 function mapPastor(raw: RawPastor): Pastor {
   return {
-    id:        raw.id,
-    dni:       raw.dni,
-    full_name: raw.full_name,
-    phone:     raw.phone ?? null,
-    created_at: raw.created_at,
+    id:             raw.id,
+    dni:            raw.dni,
+    full_name:      raw.full_name,
+    phone:          raw.phone ?? null,
+    signature_data: raw.signature_data ?? null,
+    created_at:     raw.created_at,
     programs: (raw.pastor_programs ?? []).map((pp) => ({
       id:      pp.programs.id,
       name:    pp.programs.name,
@@ -63,7 +66,7 @@ function mapPastor(raw: RawPastor): Pastor {
 }
 
 const PASTOR_SELECT = `
-  id, dni, full_name, phone, created_at,
+  id, dni, full_name, phone, signature_data, created_at,
   pastor_programs (
     programs (
       id, name,
@@ -241,6 +244,18 @@ export async function updatePastor(
 export async function deletePastor(id: string): Promise<void> {
   const { error } = await supabase.from('pastors').delete().eq('id', id)
   if (error) throw error
+}
+
+export async function savePastorSignature(id: string, signature_data: string | null): Promise<Pastor> {
+  const { data, error } = await supabase
+    .from('pastors')
+    .update({ signature_data })
+    .eq('id', id)
+    .select(PASTOR_SELECT)
+    .single()
+
+  if (error) throw error
+  return mapPastor(data as unknown as RawPastor)
 }
 
 // ── Faculties & Programs (para el selector y catálogos) ───────────────────
