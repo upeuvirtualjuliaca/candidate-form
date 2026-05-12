@@ -19,7 +19,8 @@ import {
   DECISIVE_FACTOR_OPTIONS,
 } from '@/modules/candidates/constants/faithForm'
 import { generateCandidatePdf, previewCandidatePdf } from '@/modules/candidates/utils/candidatePdf'
-import { searchStudents, type Student } from '@/modules/students/services/students.service'
+import { searchStudents, updateStudentPersonalData, type Student } from '@/modules/students/services/students.service'
+import { updateTeacherPersonalData } from '@/modules/teachers/services/teachers.service'
 import { searchPastors, getPastorByProgramName, type Pastor } from '@/modules/pastors/services/pastors.service'
 import FieldStatus from '@/modules/candidates/components/FieldStatus.vue'
 import SignaturePad from '@/components/ui/SignaturePad.vue'
@@ -656,6 +657,77 @@ function setFaithAnswer(idx: number, val: boolean) {
   const cur = faithAnswers.value[String(idx)]
   faithAnswers.value = { ...faithAnswers.value, [String(idx)]: cur === val ? null : val }
 }
+
+// ── Edición de datos personales ────────────────────────────────────────────
+
+const showEditPersonal = ref(false)
+const savingPersonal = ref(false)
+const editPersonal = ref({
+  program: null as string | null,
+  sex: null as string | null,
+  birth_date: null as string | null,
+  country: null as string | null,
+  phone: null as string | null,
+  email: null as string | null,
+})
+
+function openEditPersonal() {
+  const p = person.value
+  editPersonal.value = {
+    program: p?.program ?? null,
+    sex: p?.sex ?? null,
+    birth_date: p?.birth_date ?? null,
+    country: p?.country ?? null,
+    phone: p?.phone ?? null,
+    email: p?.institutional_email ?? null,
+  }
+  showEditPersonal.value = true
+}
+
+async function savePersonalData() {
+  if (!candidate.value || savingPersonal.value) return
+  savingPersonal.value = true
+  try {
+    const v = editPersonal.value
+    if (candidate.value.students) {
+      await updateStudentPersonalData(candidate.value.students.id, {
+        program: v.program || null,
+        sex: v.sex || null,
+        birth_date: v.birth_date || null,
+        country: v.country || null,
+        phone: v.phone || null,
+        institutional_email: v.email || null,
+      })
+      candidate.value.students.program = v.program || null
+      candidate.value.students.sex = v.sex || null
+      candidate.value.students.birth_date = v.birth_date || null
+      candidate.value.students.country = v.country || null
+      candidate.value.students.phone = v.phone || null
+      candidate.value.students.institutional_email = v.email || null
+    } else if (candidate.value.teachers) {
+      await updateTeacherPersonalData(candidate.value.teachers.id, {
+        main_ep: v.program || null,
+        sex: v.sex || null,
+        birth_date: v.birth_date || null,
+        country: v.country || null,
+        phone: v.phone || null,
+        email: v.email || null,
+      })
+      candidate.value.teachers.main_ep = v.program || null
+      candidate.value.teachers.sex = v.sex || null
+      candidate.value.teachers.birth_date = v.birth_date || null
+      candidate.value.teachers.country = v.country || null
+      candidate.value.teachers.phone = v.phone || null
+      candidate.value.teachers.email = v.email || null
+    }
+    showEditPersonal.value = false
+    triggerSavedToast()
+  } catch {
+    toast.error('Error', 'No se pudieron guardar los datos personales.')
+  } finally {
+    savingPersonal.value = false
+  }
+}
 </script>
 
 <template>
@@ -933,6 +1005,17 @@ function setFaithAnswer(idx: number, val: boolean) {
                   <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                     {{ candidate?.teachers ? 'Datos del docente' : 'Datos del estudiante' }}
                   </h3>
+                  <button
+                    v-if="canWrite"
+                    type="button"
+                    @click="openEditPersonal"
+                    class="ml-auto p-1 rounded-lg text-gray-400 hover:text-[#04395a] hover:bg-[#04395a]/10 transition-colors"
+                    title="Editar datos personales"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                    </svg>
+                  </button>
                 </div>
 
                 <div class="bg-gray-50 rounded-xl divide-y divide-gray-100">
@@ -2646,6 +2729,113 @@ function setFaithAnswer(idx: number, val: boolean) {
                 class="flex-1 py-2 rounded-xl text-sm font-medium text-white bg-red-500 hover:bg-red-600 disabled:opacity-60 transition-colors"
               >
                 {{ deleting ? 'Eliminando…' : 'Eliminar' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- Modal: editar datos personales -->
+    <Teleport to="body">
+      <Transition name="modal">
+        <div
+          v-if="showEditPersonal"
+          class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          @click.self="showEditPersonal = false"
+        >
+          <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-[#04395a]/10 flex items-center justify-center shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#04395a" class="w-5 h-5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                </svg>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Editar datos personales</p>
+                <p class="text-xs text-gray-400 mt-0.5">{{ candidate?.teachers ? 'Datos del docente' : 'Datos del estudiante' }}</p>
+              </div>
+            </div>
+
+            <div class="space-y-3">
+              <!-- EP -->
+              <div v-if="candidate?.students" class="space-y-1">
+                <label class="text-xs font-medium text-gray-500">EP</label>
+                <input
+                  v-model="editPersonal.program"
+                  type="text"
+                  placeholder="Especialidad / Programa"
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#04395a]/30"
+                />
+              </div>
+              <!-- Sexo -->
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-gray-500">Sexo</label>
+                <select
+                  v-model="editPersonal.sex"
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#04395a]/30 bg-white"
+                >
+                  <option value="">— Sin especificar —</option>
+                  <option value="1">Masculino</option>
+                  <option value="2">Femenino</option>
+                </select>
+              </div>
+              <!-- F. Nacimiento -->
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-gray-500">F. Nacimiento</label>
+                <input
+                  v-model="editPersonal.birth_date"
+                  type="date"
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#04395a]/30"
+                />
+              </div>
+              <!-- País -->
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-gray-500">País</label>
+                <input
+                  v-model="editPersonal.country"
+                  type="text"
+                  placeholder="País"
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#04395a]/30"
+                />
+              </div>
+              <!-- Teléfono -->
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-gray-500">Teléfono</label>
+                <input
+                  v-model="editPersonal.phone"
+                  type="tel"
+                  placeholder="Teléfono"
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#04395a]/30"
+                />
+              </div>
+              <!-- Correo -->
+              <div class="space-y-1">
+                <label class="text-xs font-medium text-gray-500">Correo</label>
+                <input
+                  v-model="editPersonal.email"
+                  type="email"
+                  placeholder="Correo electrónico"
+                  class="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#04395a]/30"
+                />
+              </div>
+            </div>
+
+            <div class="flex gap-2 pt-1">
+              <button
+                type="button"
+                @click="showEditPersonal = false"
+                class="flex-1 py-2 rounded-xl text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                @click="savePersonalData"
+                :disabled="savingPersonal"
+                class="flex-1 py-2 rounded-xl text-sm font-medium text-white bg-[#04395a] hover:bg-[#04395a]/90 disabled:opacity-60 transition-colors"
+              >
+                {{ savingPersonal ? 'Guardando…' : 'Guardar' }}
               </button>
             </div>
           </div>

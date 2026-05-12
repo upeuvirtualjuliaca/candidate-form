@@ -275,6 +275,21 @@ export async function createPersonAndCandidate(payload: NewPersonPayload): Promi
   return { id: (data as { id: string }).id, existed: false }
 }
 
+export async function updateStudentPersonalData(
+  studentId: string,
+  payload: {
+    program?: string | null
+    sex?: string | null
+    birth_date?: string | null
+    country?: string | null
+    phone?: string | null
+    institutional_email?: string | null
+  },
+): Promise<void> {
+  const { error } = await supabase.from('students').update(payload).eq('id', studentId)
+  if (error) throw error
+}
+
 export async function createCandidateFromStudent(studentId: string): Promise<{ id: string; existed: boolean }> {
   // Verificar si ya existe una ficha para este estudiante
   const { data: existing } = await supabase

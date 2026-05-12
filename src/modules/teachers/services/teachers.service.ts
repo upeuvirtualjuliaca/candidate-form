@@ -104,6 +104,21 @@ export async function createTeacher(payload: NewTeacherPayload): Promise<Teacher
   return data as Teacher
 }
 
+export async function updateTeacherPersonalData(
+  teacherId: string,
+  payload: {
+    main_ep?: string | null
+    sex?: string | null
+    birth_date?: string | null
+    country?: string | null
+    phone?: string | null
+    email?: string | null
+  },
+): Promise<void> {
+  const { error } = await supabase.from('teachers').update(payload).eq('id', teacherId)
+  if (error) throw error
+}
+
 export async function createCandidateFromTeacher(teacherId: string): Promise<{ id: string; existed: boolean }> {
   const { data: existing } = await supabase
     .from('candidates')
