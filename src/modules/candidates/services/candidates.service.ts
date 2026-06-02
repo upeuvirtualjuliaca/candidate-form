@@ -217,10 +217,11 @@ const CANDIDATE_LIST_SELECT = `
 `
 
 export async function getCandidates(
-  page:     number = 1,
-  pageSize: number = 10,
-  status?:  CandidateStatus,
-  search?:  string,
+  page:       number = 1,
+  pageSize:   number = 10,
+  status?:    CandidateStatus,
+  search?:    string,
+  campaignId?: string | null,
 ): Promise<PaginatedCandidates> {
   const from = (page - 1) * pageSize
   const to   = from + pageSize - 1
@@ -232,6 +233,7 @@ export async function getCandidates(
     .order('created_at', { ascending: false })
 
   if (status) query = query.eq('status', status)
+  if (campaignId) query = query.eq('campaign_id', campaignId)
 
   if (search?.trim()) {
     const term = `%${search.trim()}%`

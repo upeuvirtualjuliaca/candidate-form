@@ -65,7 +65,7 @@ export async function searchTeachers(params: {
   return (data ?? []) as Teacher[]
 }
 
-/** Devuelve un mapa { teacher_id → candidate_id } para los IDs dados. */
+/** Devuelve un mapa { teacher_id → candidate_id } para los IDs dados (excluye soft-deleted). */
 export async function getCandidateMapForTeachers(
   teacherIds: string[],
 ): Promise<Record<string, string>> {
@@ -74,6 +74,7 @@ export async function getCandidateMapForTeachers(
     .from('candidates')
     .select('id, teacher_id')
     .in('teacher_id', teacherIds)
+    .is('deleted_at', null)
   const map: Record<string, string> = {}
   for (const row of (data ?? []) as { id: string; teacher_id: string }[]) {
     map[row.teacher_id] = row.id
@@ -119,18 +120,19 @@ export async function updateTeacherPersonalData(
   if (error) throw error
 }
 
-export async function createCandidateFromTeacher(teacherId: string): Promise<{ id: string; existed: boolean }> {
+export async function createCandidateFromTeacher(teacherId: string, campaignId?: string | null): Promise<{ id: string; existed: boolean }> {
   const { data: existing } = await supabase
     .from('candidates')
     .select('id')
     .eq('teacher_id', teacherId)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (existing) return { id: (existing as { id: string }).id, existed: true }
 
   const { data, error } = await supabase
     .from('candidates')
-    .insert({ teacher_id: teacherId, status: 'draft' })
+    .insert({ teacher_id: teacherId, status: 'draft', campaign_id: campaignId ?? null })
     .select('id')
     .single()
 

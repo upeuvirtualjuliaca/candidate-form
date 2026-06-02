@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, type Ref } from 'vue'
+import { ref, computed, watch, onMounted, type Ref } from 'vue'
 import { supabase } from '@/core/supabase'
+import { useCampaignStore } from '@/modules/campaigns/store/campaign.store'
+import { storeToRefs } from 'pinia'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -15,6 +17,9 @@ import {
 import { Bar } from 'vue-chartjs'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend, Filler)
+
+const campaignStore = useCampaignStore()
+const { selected: selectedCampaign } = storeToRefs(campaignStore)
 
 // ── Counters ────────────────────────────────────────────────────────────────
 const totalUsuarios        = ref(0)
@@ -98,6 +103,7 @@ const chartOptions = {
 
 // ── Easing counter animation ────────────────────────────────────────────────
 function animateTo(target: Ref<number>, finalValue: number) {
+  target.value = 0
   if (finalValue === 0) return
   const duration = 1800
   const start    = performance.now()
@@ -113,9 +119,18 @@ function animateTo(target: Ref<number>, finalValue: number) {
 }
 
 // ── Data fetch ───────────────────────────────────────────────────────────────
-onMounted(async () => {
+async function loadData(campaignId: string | null) {
+  // Build candidates query — filter by campaign if one is selected
+  let query = supabase
+    .from('candidates')
+    .select('id, status, student_id, teacher_id, created_at, ceremony_completed, campaign_id')
+
+  if (campaignId) {
+    query = query.eq('campaign_id', campaignId)
+  }
+
   const [candidatesRes, studentsRes, teachersRes] = await Promise.all([
-    supabase.from('candidates').select('id, status, student_id, teacher_id, created_at, ceremony_completed'),
+    query,
     supabase.from('students').select('id', { count: 'exact', head: true }),
     supabase.from('teachers').select('id', { count: 'exact', head: true }),
   ])
@@ -127,7 +142,10 @@ onMounted(async () => {
   const totalDraft      = candidates.filter(c => c.status === 'draft').length
   const totalCandidates = candidates.length
   const libres          = candidates.filter(c => !c.student_id && !c.teacher_id).length
-  const totalUsers      = (studentsRes.count ?? 0) + (teachersRes.count ?? 0) + libres
+  // Total usuarios: global count when no campaign selected, else persons with fichas in this campaign
+  const totalUsers = campaignId
+    ? totalCandidates
+    : (studentsRes.count ?? 0) + (teachersRes.count ?? 0) + libres
 
   const totalBautismos = candidates.filter(c => c.ceremony_completed === true).length
 
@@ -137,7 +155,7 @@ onMounted(async () => {
   animateTo(pendientes,           totalDraft)
   animateTo(bautismosConfirmados, totalBautismos)
 
-  // ── Build monthly buckets (all time)
+  // ── Build monthly buckets
   const bucketMap = new Map<string, DayBucket>()
   for (const c of candidates) {
     const key = (c.created_at as string).slice(0, 7) // YYYY-MM
@@ -156,6 +174,12 @@ onMounted(async () => {
   chartBuckets.value = Array.from(bucketMap.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, v]) => v)
+}
+
+onMounted(() => loadData(selectedCampaign.value?.id ?? null))
+
+watch(selectedCampaign, (campaign) => {
+  loadData(campaign?.id ?? null)
 })
 </script>
 
@@ -164,7 +188,14 @@ onMounted(async () => {
     <!-- Page heading -->
     <div>
       <h2 class="text-2xl font-bold text-[#04395a]">Panel de control</h2>
-      <p class="text-sm text-gray-500 mt-0.5">Resumen general del sistema de registro.</p>
+      <p class="text-sm text-gray-500 mt-0.5">
+        <template v-if="selectedCampaign">
+          Campaña: <span class="font-semibold text-[#04395a]">{{ selectedCampaign.name }}</span>
+        </template>
+        <template v-else>
+          Resumen general del sistema de registro.
+        </template>
+      </p>
     </div>
 
     <!-- Stats grid -->
@@ -181,7 +212,9 @@ onMounted(async () => {
         </div>
         <div>
           <p class="text-2xl font-bold text-gray-800 tabular-nums">{{ totalUsuarios.toLocaleString() }}</p>
-          <p class="text-xs text-gray-500 mt-0.5 uppercase tracking-wide font-medium">Total Usuarios</p>
+          <p class="text-xs text-gray-500 mt-0.5 uppercase tracking-wide font-medium">
+            {{ selectedCampaign ? 'Candidatos' : 'Total Usuarios' }}
+          </p>
         </div>
       </div>
 
@@ -251,8 +284,10 @@ onMounted(async () => {
     <div class="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
       <div class="flex items-center justify-between mb-5">
         <div>
-          <h3 class="text-sm font-semibold text-gray-700">Actividad por día</h3>
-          <p class="text-xs text-gray-400 mt-0.5">Todos los tiempos · agrupado por mes</p>
+          <h3 class="text-sm font-semibold text-gray-700">Actividad por mes</h3>
+          <p class="text-xs text-gray-400 mt-0.5">
+            {{ selectedCampaign ? selectedCampaign.name : 'Todos los tiempos' }} · agrupado por mes
+          </p>
         </div>
         <!-- Legend dots -->
         <div class="hidden sm:flex items-center gap-4 text-xs text-gray-500">
@@ -273,7 +308,9 @@ onMounted(async () => {
       <div class="h-64">
         <Bar v-if="chartBuckets.length" :data="chartData" :options="chartOptions" />
         <div v-else class="h-full flex items-center justify-center">
-          <p class="text-sm text-gray-300">Cargando datos…</p>
+          <p class="text-sm text-gray-300">
+            {{ selectedCampaign ? 'Sin fichas en esta campaña aún.' : 'Cargando datos…' }}
+          </p>
         </div>
       </div>
     </div>

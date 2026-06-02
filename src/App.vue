@@ -1,11 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useCampaignStore } from '@/modules/campaigns/store/campaign.store'
+import { storeToRefs } from 'pinia'
 
 const router = useRouter()
 const showDup     = ref(false)
 const showNew     = ref(false)
 const showDeleted = ref(false)
+
+// ── Campaign toast (lee del store) ─────────────────────────────────────────
+const campaignStore = useCampaignStore()
+const { notification } = storeToRefs(campaignStore)
 
 onMounted(() => {
   router.afterEach((to) => {
@@ -74,6 +80,39 @@ onMounted(() => {
     </div>
     <span style="color:#dc2626;font-size:20px;line-height:1">&times;</span>
   </div>
+
+  <!-- Toast: campaña -->
+  <Transition name="toast-slide">
+    <div
+      v-if="notification"
+      :style="`
+        position:fixed;top:20px;right:20px;z-index:2147483647;
+        width:360px;padding:16px 18px;border-radius:14px;
+        background:${notification.type === 'error' ? '#fef2f2' : '#eff6ff'};
+        border:1px solid ${notification.type === 'error' ? '#fca5a5' : '#93c5fd'};
+        box-shadow:0 10px 40px rgba(0,0,0,0.2);
+        display:flex;align-items:flex-start;gap:12px;
+        font-family:system-ui,sans-serif;cursor:pointer;
+      `"
+      @click="campaignStore.clearNotification()"
+    >
+      <svg v-if="notification.type === 'error'" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#dc2626" style="width:22px;height:22px;flex-shrink:0;margin-top:1px">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+      </svg>
+      <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="#2563eb" style="width:22px;height:22px;flex-shrink:0;margin-top:1px">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+      </svg>
+      <div style="flex:1">
+        <p :style="`margin:0 0 3px;font-size:13px;font-weight:700;color:${notification.type === 'error' ? '#7f1d1d' : '#1e3a5f'}`">
+          {{ notification.title }}
+        </p>
+        <p v-if="notification.msg" :style="`margin:0;font-size:12px;color:${notification.type === 'error' ? '#991b1b' : '#1d4ed8'};line-height:1.45`">
+          {{ notification.msg }}
+        </p>
+      </div>
+      <span :style="`color:${notification.type === 'error' ? '#dc2626' : '#3b82f6'};font-size:20px;line-height:1`">&times;</span>
+    </div>
+  </Transition>
 
   <!-- Toast: éxito creación -->
   <div

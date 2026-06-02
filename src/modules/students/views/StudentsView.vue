@@ -26,7 +26,10 @@ import {
   type Teacher,
 } from '@/modules/teachers/services/teachers.service'
 
+import { useCampaignStore } from '@/modules/campaigns/store/campaign.store'
+
 const router = useRouter()
+const campaignStore = useCampaignStore()
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 const tabs: Tab[] = [
@@ -236,10 +239,15 @@ async function handleCreateCandidate(student: Student | StudentDetail) {
     router.push({ path: `/candidates/${candidateMap.value[student.id]}`, query: { dup: '1' } })
     return
   }
+  const campaignCheck = campaignStore.checkValidity()
+  if (!campaignCheck.allowed) {
+    campaignStore.notify('No se puede crear la ficha', campaignCheck.reason, 'error')
+    return
+  }
   if (creatingId.value) return
   creatingId.value = student.id
   try {
-    const { id: candidateId, existed } = await createCandidateFromStudent(student.id)
+    const { id: candidateId, existed } = await createCandidateFromStudent(student.id, campaignStore.selected?.id ?? null)
     candidateMap.value[student.id] = candidateId
     router.push({
       path: `/candidates/${candidateId}`,
@@ -259,10 +267,15 @@ async function handleCreateTeacherCandidate(teacher: Teacher) {
     })
     return
   }
+  const campaignCheck = campaignStore.checkValidity()
+  if (!campaignCheck.allowed) {
+    campaignStore.notify('No se puede crear la ficha', campaignCheck.reason, 'error')
+    return
+  }
   if (creatingId.value) return
   creatingId.value = teacher.id
   try {
-    const { id: candidateId, existed } = await createCandidateFromTeacher(teacher.id)
+    const { id: candidateId, existed } = await createCandidateFromTeacher(teacher.id, campaignStore.selected?.id ?? null)
     teacherCandidateMap.value[teacher.id] = candidateId
     router.push({
       path: `/candidates/${candidateId}`,
@@ -380,6 +393,11 @@ function resetStudentForm() {
 
 async function handleCreateStudent() {
   if (!nsValid.value || nsSaving.value) return
+  const campaignCheck = campaignStore.checkValidity()
+  if (!campaignCheck.allowed) {
+    campaignStore.notify('No se puede crear la ficha', campaignCheck.reason, 'error')
+    return
+  }
   nsSaving.value = true
   nsError.value = ''
   try {
@@ -395,7 +413,7 @@ async function handleCreateStudent() {
       campus: nsCampus.value || null,
       cycle: nsCycle.value || null,
     })
-    const { id: candidateId, existed } = await createCandidateFromStudent(student.id)
+    const { id: candidateId, existed } = await createCandidateFromStudent(student.id, campaignStore.selected?.id ?? null)
     candidateMap.value[student.id] = candidateId
     router.push({
       path: `/candidates/${candidateId}`,
@@ -432,6 +450,11 @@ function resetTeacherForm() {
 
 async function handleCreateTeacher() {
   if (!ntValid.value || ntSaving.value) return
+  const campaignCheck = campaignStore.checkValidity()
+  if (!campaignCheck.allowed) {
+    campaignStore.notify('No se puede crear la ficha', campaignCheck.reason, 'error')
+    return
+  }
   ntSaving.value = true
   ntError.value = ''
   try {
@@ -447,7 +470,7 @@ async function handleCreateTeacher() {
       campus: ntCampus.value || null,
       condition: ntCondition.value || null,
     })
-    const { id: candidateId, existed } = await createCandidateFromTeacher(teacher.id)
+    const { id: candidateId, existed } = await createCandidateFromTeacher(teacher.id, campaignStore.selected?.id ?? null)
     teacherCandidateMap.value[teacher.id] = candidateId
     router.push({
       path: `/candidates/${candidateId}`,
@@ -483,6 +506,11 @@ const newFormValid = computed(
 
 async function handleCreatePerson() {
   if (!newFormValid.value || newSaving.value) return
+  const campaignCheck = campaignStore.checkValidity()
+  if (!campaignCheck.allowed) {
+    campaignStore.notify('No se puede crear la ficha', campaignCheck.reason, 'error')
+    return
+  }
   newSaving.value = true
   newError.value = ''
   try {
@@ -493,7 +521,7 @@ async function handleCreatePerson() {
       birth_date: newBirthDate.value || null,
       phone: newPhone.value || null,
       institutional_email: newEmail.value || null,
-    })
+    }, campaignStore.selected?.id ?? null)
     router.push({
       path: `/candidates/${candidateId}`,
       query: existed ? { dup: '1' } : { new: '1' },

@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { usePermissions } from '@/composables/usePermissions'
+import { useCampaignStore } from '@/modules/campaigns/store/campaign.store'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -19,6 +21,8 @@ import { supabase } from '@/core/supabase'
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
 const { canWrite } = usePermissions()
+const campaignStore = useCampaignStore()
+const { selected: selectedCampaign } = storeToRefs(campaignStore)
 
 const tabs: Tab[] = [
   { key: 'today', label: 'Hoy' },
@@ -93,8 +97,10 @@ const PAGE_SIZE = 10
 
 async function loadBaptism() {
   baptismLoading.value = true
+  baptismPage.value = 1
+  clearFilters()
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('candidates')
       .select(
         `
@@ -104,6 +110,12 @@ async function loadBaptism() {
       `,
       )
       .order('created_at', { ascending: false })
+
+    if (selectedCampaign.value?.id) {
+      query = query.eq('campaign_id', selectedCampaign.value.id)
+    }
+
+    const { data, error } = await query
     if (error) throw error
     baptismAll.value = (data ?? []) as unknown as BaptismRow[]
   } finally {
@@ -112,7 +124,13 @@ async function loadBaptism() {
 }
 
 watch(activeTab, (tab) => {
-  if (tab === 'baptism' && baptismAll.value.length === 0 && !baptismLoading.value) loadBaptism()
+  if (tab === 'baptism' && !baptismLoading.value) loadBaptism()
+})
+
+// Reload baptism data when campaign changes
+watch(selectedCampaign, () => {
+  if (activeTab.value === 'baptism') loadBaptism()
+  else baptismAll.value = [] // force reload on next tab switch
 })
 
 // helpers
@@ -368,7 +386,12 @@ onMounted(loadToday)
   <div class="space-y-6">
     <div>
       <h2 class="text-2xl font-bold text-[#04395a]">Reportes</h2>
-      <p class="text-sm text-gray-500 mt-0.5">Análisis y exportación de información del sistema.</p>
+      <p class="text-sm text-gray-500 mt-0.5">
+        <template v-if="selectedCampaign">
+          Campaña: <span class="font-semibold text-[#04395a]">{{ selectedCampaign.name }}</span>
+        </template>
+        <template v-else>Análisis y exportación de información del sistema.</template>
+      </p>
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">

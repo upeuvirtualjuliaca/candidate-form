@@ -71,6 +71,13 @@ const router = createRouter({
           component: () => import('@/modules/secretaries/views/SecretariesView.vue'),
         },
 
+        // Campañas → tabs: Listado | Nueva
+        {
+          path: 'campaigns',
+          name: 'campaigns',
+          component: () => import('@/modules/campaigns/views/CampaignsView.vue'),
+        },
+
         // Reportes → tabs: Por Programa | Por Sede | Por Estado | Exportar
         {
           path: 'reports',
@@ -110,7 +117,7 @@ const router = createRouter({
 })
 
 const ADMIN_ONLY_ROUTES = new Set([
-  'admission', 'teachers-import', 'pastors', 'secretaries',
+  'admission', 'teachers-import', 'pastors', 'secretaries', 'campaigns',
   'users', 'admin', 'settings',
 ])
 

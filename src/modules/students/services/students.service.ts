@@ -202,7 +202,7 @@ export async function getStudentDetail(id: string): Promise<StudentDetail> {
   return data as StudentDetail
 }
 
-/** Devuelve un mapa { student_id → candidate_id } para los IDs dados. */
+/** Devuelve un mapa { student_id → candidate_id } para los IDs dados (excluye soft-deleted). */
 export async function getCandidateMapForStudents(
   studentIds: string[],
 ): Promise<Record<string, string>> {
@@ -211,6 +211,7 @@ export async function getCandidateMapForStudents(
     .from('candidates')
     .select('id, student_id')
     .in('student_id', studentIds)
+    .is('deleted_at', null)
   const map: Record<string, string> = {}
   for (const row of (data ?? []) as { id: string; student_id: string }[]) {
     map[row.student_id] = row.id
@@ -227,7 +228,7 @@ export interface NewPersonPayload {
   institutional_email?: string | null
 }
 
-export async function createPersonAndCandidate(payload: NewPersonPayload): Promise<{ id: string; existed: boolean }> {
+export async function createPersonAndCandidate(payload: NewPersonPayload, campaignId?: string | null): Promise<{ id: string; existed: boolean }> {
   // Verificar si ya existe un estudiante con ese DNI
   const { data: existing } = await supabase
     .from('students')
@@ -256,18 +257,19 @@ export async function createPersonAndCandidate(payload: NewPersonPayload): Promi
     studentId = (newStudent as { id: string }).id
   }
 
-  // Crear la ficha de candidato
+  // Crear la ficha de candidato (ignorar soft-deleted)
   const { data: existingCandidate } = await supabase
     .from('candidates')
     .select('id')
     .eq('student_id', studentId)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (existingCandidate) return { id: (existingCandidate as { id: string }).id, existed: true }
 
   const { data, error } = await supabase
     .from('candidates')
-    .insert({ student_id: studentId, status: 'draft' })
+    .insert({ student_id: studentId, status: 'draft', campaign_id: campaignId ?? null })
     .select('id')
     .single()
 
@@ -290,19 +292,20 @@ export async function updateStudentPersonalData(
   if (error) throw error
 }
 
-export async function createCandidateFromStudent(studentId: string): Promise<{ id: string; existed: boolean }> {
-  // Verificar si ya existe una ficha para este estudiante
+export async function createCandidateFromStudent(studentId: string, campaignId?: string | null): Promise<{ id: string; existed: boolean }> {
+  // Verificar si ya existe una ficha activa (no eliminada) para este estudiante
   const { data: existing } = await supabase
     .from('candidates')
     .select('id')
     .eq('student_id', studentId)
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (existing) return { id: (existing as { id: string }).id, existed: true }
 
   const { data, error } = await supabase
     .from('candidates')
-    .insert({ student_id: studentId, status: 'draft' })
+    .insert({ student_id: studentId, status: 'draft', campaign_id: campaignId ?? null })
     .select('id')
     .single()
 

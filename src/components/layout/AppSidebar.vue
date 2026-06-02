@@ -62,7 +62,8 @@ const navItems: NavItem[] = [
       { name: 'Estudiantes', to: '/admission' },
       { name: 'Docentes', to: '/teachers-import' },
       { name: 'Pastores', to: '/pastors' },
-      { name: 'Secretaría', to: '/secretaries' },
+      { name: 'Secretaría',  to: '/secretaries' },
+      { name: 'Campañas',   to: '/campaigns'   },
     ],
   },
 

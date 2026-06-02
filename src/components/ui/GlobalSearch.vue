@@ -6,6 +6,7 @@ import { searchTeachers, createCandidateFromTeacher, getCandidateMapForTeachers 
 import { useToastStore } from '@/stores/toast'
 import { usePermissions } from '@/composables/usePermissions'
 import { supabase } from '@/core/supabase'
+import { useCampaignStore } from '@/modules/campaigns/store/campaign.store'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -31,9 +32,10 @@ interface SearchResult {
 
 // ── State ──────────────────────────────────────────────────────────────────
 
-const router     = useRouter()
-const toast      = useToastStore()
-const { canWrite } = usePermissions()
+const router        = useRouter()
+const toast         = useToastStore()
+const campaignStore = useCampaignStore()
+const { canWrite }  = usePermissions()
 const query      = ref('')
 const results    = ref<SearchResult[]>([])
 const loading    = ref(false)
@@ -165,6 +167,14 @@ async function goToFicha(r: SearchResult, closeDropdown = true) {
   if (navigating.value) return
   // Guard: viewer cannot create fichas
   if (!existingCandidateId.value && !canWrite.value) return
+  // Guard: campaign must be valid to create new fichas
+  if (!existingCandidateId.value) {
+    const campaignCheck = campaignStore.checkValidity()
+    if (!campaignCheck.allowed) {
+      campaignStore.notify('No se puede crear la ficha', campaignCheck.reason, 'error')
+      return
+    }
+  }
   navigating.value = true
   try {
     let candidateId: string
@@ -172,11 +182,11 @@ async function goToFicha(r: SearchResult, closeDropdown = true) {
     if (existingCandidateId.value) {
       candidateId = existingCandidateId.value
     } else if (r.type === 'teacher') {
-      const res = await createCandidateFromTeacher(r.id)
+      const res = await createCandidateFromTeacher(r.id, campaignStore.selected?.id ?? null)
       candidateId = res.id
       isNew = !res.existed
     } else {
-      const res = await createCandidateFromStudent(r.id)
+      const res = await createCandidateFromStudent(r.id, campaignStore.selected?.id ?? null)
       candidateId = res.id
       isNew = !res.existed
     }

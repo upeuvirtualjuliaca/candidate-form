@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import { useToastStore } from '@/stores/toast'
 import { usePermissions } from '@/composables/usePermissions'
 import Tabs, { type Tab } from '@/components/ui/Tabs.vue'
@@ -12,12 +13,15 @@ import {
   type CandidateRow,
   type CandidateStatus,
 } from '@/modules/candidates/services/candidates.service'
+import { useCampaignStore } from '@/modules/campaigns/store/campaign.store'
 import { searchStudents, type Student } from '@/modules/students/services/students.service'
 import { supabase } from '@/core/supabase'
 
 const router = useRouter()
 const toast = useToastStore()
 const { canWrite } = usePermissions()
+const campaignStore = useCampaignStore()
+const { selected: selectedCampaign } = storeToRefs(campaignStore)
 
 // Nombre del usuario actual (igual que ValidationView)
 const currentUserName = ref<string | null>(null)
@@ -79,7 +83,7 @@ const listLoading = ref(false)
 const listRows = ref<CandidateRow[]>([])
 const listTotal = ref(0)
 const listPage = ref(1)
-const listPageSize = ref(10)
+const listPageSize = ref(8)
 const listSearch = ref('')
 const listDeleteId = ref<string | null>(null)
 const listDeleting = ref(false)
@@ -87,7 +91,7 @@ const listDeleting = ref(false)
 async function loadList() {
   listLoading.value = true
   try {
-    const res = await getCandidates(listPage.value, listPageSize.value, undefined, listSearch.value)
+    const res = await getCandidates(listPage.value, listPageSize.value, undefined, listSearch.value, selectedCampaign.value?.id ?? null)
     listRows.value = res.data
     listTotal.value = res.count
   } finally {
@@ -191,6 +195,7 @@ async function loadDrafts() {
       draftsPageSize.value,
       'draft',
       draftsSearch.value,
+      selectedCampaign.value?.id ?? null,
     )
     draftsRows.value = res.data
     draftsTotal.value = res.count
@@ -222,6 +227,7 @@ async function loadCompleted() {
       completedPageSize.value,
       'completed',
       completedSearch.value,
+      selectedCampaign.value?.id ?? null,
     )
     completedRows.value = res.data
     completedTotal.value = res.count
@@ -243,6 +249,16 @@ watch(activeTab, (tab) => {
     loadCompleted()
 })
 
+// Reload all tabs when campaign changes
+watch(selectedCampaign, () => {
+  listPage.value    = 1
+  draftsPage.value  = 1
+  completedPage.value = 1
+  loadList()
+  if (draftsRows.value.length > 0 || activeTab.value === 'drafts')   loadDrafts()
+  if (completedRows.value.length > 0 || activeTab.value === 'completed') loadCompleted()
+})
+
 // ── New candidate tab ──────────────────────────────────────────────────────
 
 const searchQuery = ref('')
@@ -253,6 +269,7 @@ const existingCandidateId = ref<string | null>(null)
 const checkingDuplicate = ref(false)
 const creating = ref(false)
 const createError = ref('')
+const campaignError = ref('')
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -297,10 +314,19 @@ async function selectStudent(s: Student) {
 
 async function handleCreate() {
   if (!selectedStudent.value) return
-  // Guardia duro: verificar duplicado siempre, independiente del estado de la UI
   creating.value = true
   createError.value = ''
+  campaignError.value = ''
   try {
+    // Validar campaña seleccionada en el dropdown
+    const campaignCheck = campaignStore.checkValidity()
+    if (!campaignCheck.allowed) {
+      const reason = campaignCheck.reason ?? 'No hay una campaña vigente para crear fichas.'
+      campaignError.value = reason
+      campaignStore.notify('No se puede crear la ficha', reason, 'error')
+      creating.value = false
+      return
+    }
     const existing = await getCandidateIdByStudentId(selectedStudent.value.id)
     if (existing) {
       await router.push({ path: `/candidates/${existing}`, query: { dup: '1' } })
@@ -320,6 +346,7 @@ function resetNew() {
   selectedStudent.value = null
   existingCandidateId.value = null
   createError.value = ''
+  campaignError.value = ''
 }
 
 watch(activeTab, (tab) => {
@@ -333,7 +360,12 @@ watch(activeTab, (tab) => {
     <div class="flex items-start justify-between flex-wrap gap-3">
       <div>
         <h2 class="text-2xl font-bold text-[#04395a]">Fichas</h2>
-        <p class="text-sm text-gray-500 mt-0.5">Gestión de fichas de candidatos.</p>
+        <p class="text-sm text-gray-500 mt-0.5">
+          <template v-if="selectedCampaign">
+            Campaña: <span class="font-semibold text-[#04395a]">{{ selectedCampaign.name }}</span>
+          </template>
+          <template v-else>Gestión de fichas de candidatos.</template>
+        </p>
       </div>
       <!-- <button
         type="button"
@@ -1157,6 +1189,17 @@ watch(activeTab, (tab) => {
               class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium text-amber-800 bg-amber-100 hover:bg-amber-200 transition-colors whitespace-nowrap"
               >Ver ficha</RouterLink
             >
+          </div>
+
+          <!-- Error de campaña -->
+          <div
+            v-if="campaignError"
+            class="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#dc2626" class="w-5 h-5 shrink-0 mt-0.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+            </svg>
+            <p class="text-sm font-medium text-red-700">{{ campaignError }}</p>
           </div>
 
           <!-- Error -->
