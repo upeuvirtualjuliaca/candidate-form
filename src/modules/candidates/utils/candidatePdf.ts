@@ -356,7 +356,7 @@ function drawMainHeader(doc: jsPDF, y: number, ceremonyType: string | null | und
 // ── SECTION 1: IDENTIFICACIÓN (grid layout) ───────────────────────────────────
 
 function drawIdentificationSection(doc: jsPDF, startY: number, c: CandidateDetail): number {
-  const s = c.students
+  const s = c.students ?? c.teachers
   const STRIP_W = 8 // "IDENTIFICACIÓN" vertical strip
   const cx = SX + STRIP_W
   const cw = PW - STRIP_W // 182 mm content width
@@ -1263,7 +1263,7 @@ export function generateCandidatePdf(
   opts?: { churchSecretary?: string; churchSecretarySignature?: string | null; officiantPastorSignature?: string | null },
 ): void {
   const doc = buildDoc(candidate, opts)
-  const name = candidate.students?.full_name?.replace(/\s+/g, '_') ?? 'candidato'
+  const name = (candidate.students?.full_name ?? candidate.teachers?.full_name)?.replace(/\s+/g, '_') ?? 'candidato'
   doc.save(`ficha_${name}_${candidate.id.slice(0, 8)}.pdf`)
 }
 
