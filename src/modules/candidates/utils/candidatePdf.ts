@@ -11,6 +11,7 @@ import logoUrl from '../assets/pdf/Seventh-day_Adventist_Church_logo_in_Spanish.
 // ── Logo preload (base64 + dimensiones naturales) ────────────────────────────
 // Se precarga al importar el módulo para que esté lista cuando el usuario genere el PDF.
 let _logoBase64: string | null = null
+let _logoFormat: string = 'JPEG'
 let _logoNaturalW = 1
 let _logoNaturalH = 1
 
@@ -22,15 +23,33 @@ fetch(logoUrl)
         const reader = new FileReader()
         reader.onload = () => {
           const base64 = reader.result as string
-          _logoBase64 = base64
           // Obtener dimensiones reales cargando la imagen en un <img> temporal
           const img = new Image()
           img.onload = () => {
             _logoNaturalW = img.naturalWidth
             _logoNaturalH = img.naturalHeight
+            // Comprimir a JPEG para reducir el tamaño del PDF (fondo blanco sobre transparencia)
+            try {
+              const canvas = document.createElement('canvas')
+              canvas.width = img.naturalWidth
+              canvas.height = img.naturalHeight
+              const ctx2d = canvas.getContext('2d')!
+              ctx2d.fillStyle = '#ffffff'
+              ctx2d.fillRect(0, 0, canvas.width, canvas.height)
+              ctx2d.drawImage(img, 0, 0)
+              _logoBase64 = canvas.toDataURL('image/jpeg', 0.85)
+              _logoFormat = 'JPEG'
+            } catch {
+              _logoBase64 = base64
+              _logoFormat = 'PNG'
+            }
             resolve()
           }
-          img.onerror = () => resolve()
+          img.onerror = () => {
+            _logoBase64 = base64
+            _logoFormat = 'PNG'
+            resolve()
+          }
           img.src = base64
         }
         reader.readAsDataURL(blob)
@@ -277,7 +296,7 @@ function drawMainHeader(doc: jsPDF, y: number, ceremonyType: string | null | und
     // Centra dentro del área disponible
     const imgX = SX + pad + (maxW - imgW) / 2
     const imgY = y + pad + (maxH - imgH) / 2
-    doc.addImage(_logoBase64, 'PNG', imgX, imgY, imgW, imgH)
+    doc.addImage(_logoBase64, _logoFormat, imgX, imgY, imgW, imgH)
   }
 
   // ── Content rows (right area) ────────────────────────────────────────────
@@ -1240,7 +1259,7 @@ function drawSignatures(ctx: FlowCtx): void {
 // ── BUILD (shared) ────────────────────────────────────────────────────────────
 
 function buildDoc(candidate: CandidateDetail, opts?: { churchSecretary?: string; churchSecretarySignature?: string | null; officiantPastorSignature?: string | null }): jsPDF {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true })
   const pageH = doc.internal.pageSize.getHeight()
 
   // PAGE 1: Header + Section 1 + Section 2

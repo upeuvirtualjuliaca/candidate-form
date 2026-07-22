@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import siloeLogo from '@/modules/admin/assets/siloe.png'
 import iglesiaLogo from '@/modules/admin/assets/iglesia_blanco.png'
 import { usePermissions } from '@/composables/usePermissions'
+import { useCampaignStore } from '@/modules/campaigns/store/campaign.store'
 
 defineProps<{ open: boolean }>()
 defineEmits<{ close: [] }>()
@@ -62,21 +63,21 @@ const navItems: NavItem[] = [
       { name: 'Estudiantes', to: '/admission' },
       { name: 'Docentes', to: '/teachers-import' },
       { name: 'Pastores', to: '/pastors' },
-      { name: 'Secretaría',  to: '/secretaries' },
-      { name: 'Campañas',   to: '/campaigns'   },
+      { name: 'Secretaría', to: '/secretaries' },
+      { name: 'Campañas', to: '/campaigns' },
     ],
   },
 
   {
     id: 'students',
-    name: 'Candidatos',
+    name: 'Listado general',
     icon: iStudents,
     children: [{ name: 'Listado', to: '/students' }],
   },
 
   {
     id: 'candidates',
-    name: 'Fichas',
+    name: 'Fichas registradas',
     icon: iCandidates,
     children: [{ name: 'Registros', to: '/candidates' }],
   },
@@ -148,6 +149,46 @@ function syncOpenGroups() {
 
 syncOpenGroups()
 watch(() => route.path, syncOpenGroups)
+
+// ── Active campaign display ────────────────────────────────────────────────
+const campaignStore = useCampaignStore()
+
+function todayIso(): string {
+  return new Date().toISOString().split('T')[0]
+}
+
+const campaignStatus = computed(() => {
+  const c = campaignStore.selected
+  if (!c) return null
+  if (!c.is_active) return 'inactiva'
+  const t = todayIso()
+  if (t < c.start_date) return 'pendiente'
+  if (t > c.end_date) return 'vencida'
+  return 'vigente'
+})
+
+const campaignStatusLabel = computed(() => {
+  const s = campaignStatus.value
+  if (s === 'vigente') return 'Vigente'
+  if (s === 'vencida') return 'Vencida'
+  if (s === 'pendiente') return 'Pendiente'
+  if (s === 'inactiva') return 'Inactiva'
+  return ''
+})
+
+const campaignStatusColors = computed(() => {
+  const s = campaignStatus.value
+  if (s === 'vigente') return { dot: 'bg-emerald-400', badge: 'bg-emerald-400/20 text-emerald-300', ring: 'border-emerald-400/30' }
+  if (s === 'vencida') return { dot: 'bg-red-400', badge: 'bg-red-400/20 text-red-300', ring: 'border-red-400/30' }
+  if (s === 'pendiente') return { dot: 'bg-amber-400', badge: 'bg-amber-400/20 text-amber-300', ring: 'border-amber-400/30' }
+  return { dot: 'bg-white/30', badge: 'bg-white/10 text-white/40', ring: 'border-white/10' }
+})
+
+function formatDate(iso: string): string {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
 </script>
 
 <template>
@@ -157,14 +198,12 @@ watch(() => route.path, syncOpenGroups)
   </Transition>
 
   <!-- Sidebar -->
-  <aside
-    :class="[
-      'fixed top-0 left-0 z-30 h-full w-64 flex flex-col',
-      'bg-[#04395a] text-white shadow-2xl',
-      'transition-transform duration-300 ease-in-out',
-      open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
-    ]"
-  >
+  <aside :class="[
+    'fixed top-0 left-0 z-30 h-full w-64 flex flex-col',
+    'bg-[#04395a] text-white shadow-2xl',
+    'transition-transform duration-300 ease-in-out',
+    open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+  ]">
     <!-- Logo -->
     <div class="flex items-center gap-3 px-5 py-4 border-b border-white/10 shrink-0">
       <img :src="siloeLogo" alt="Baptos" class="w-10 h-10 rounded-xl object-contain shrink-0" />
@@ -178,18 +217,13 @@ watch(() => route.path, syncOpenGroups)
     <nav class="flex-1 overflow-y-auto px-3 py-3 space-y-0.5 scrollbar-thin">
       <template v-for="item in visibleNavItems" :key="item.id">
         <!-- Single item (Dashboard) -->
-        <RouterLink
-          v-if="!isGroup(item)"
-          :to="(item as any).to"
-          @click="$emit('close')"
-          :class="[
-            'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full',
-            'transition-all duration-200',
-            route.path === (item as any).to
-              ? 'bg-[#fdc710] text-[#04395a]'
-              : 'text-white/70 hover:bg-[#068ab8]/60 hover:text-white',
-          ]"
-        >
+        <RouterLink v-if="!isGroup(item)" :to="(item as any).to" @click="$emit('close')" :class="[
+          'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full',
+          'transition-all duration-200',
+          route.path === (item as any).to
+            ? 'bg-[#fdc710] text-[#04395a]'
+            : 'text-white/70 hover:bg-[#068ab8]/60 hover:text-white',
+        ]">
           <!-- eslint-disable-next-line vue/no-v-html -->
           <span v-html="item.icon" />
           <span>{{ item.name }}</span>
@@ -198,71 +232,49 @@ watch(() => route.path, syncOpenGroups)
         <!-- Group item -->
         <div v-else>
           <!-- Group header button -->
-          <button
-            type="button"
-            @click="toggleGroup(item.id)"
-            :class="[
-              'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full text-left',
-              'transition-all duration-200',
-              groupHasActiveChild(item as NavGroup)
-                ? 'text-white bg-white/10'
-                : 'text-white/70 hover:bg-[#068ab8]/60 hover:text-white',
-            ]"
-          >
+          <button type="button" @click="toggleGroup(item.id)" :class="[
+            'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium w-full text-left',
+            'transition-all duration-200',
+            groupHasActiveChild(item as NavGroup)
+              ? 'text-white bg-white/10'
+              : 'text-white/70 hover:bg-[#068ab8]/60 hover:text-white',
+          ]">
             <!-- eslint-disable-next-line vue/no-v-html -->
             <span v-html="item.icon" />
             <span class="flex-1 truncate">{{ item.name }}</span>
 
             <!-- Active indicator dot -->
-            <span
-              v-if="groupHasActiveChild(item as NavGroup)"
-              class="w-1.5 h-1.5 rounded-full bg-[#fdc710] shrink-0"
-            />
+            <span v-if="groupHasActiveChild(item as NavGroup)" class="w-1.5 h-1.5 rounded-full bg-[#fdc710] shrink-0" />
 
             <!-- Chevron -->
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="2"
-              stroke="currentColor"
-              :class="[
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2"
+              stroke="currentColor" :class="[
                 'w-3.5 h-3.5 shrink-0 transition-transform duration-300',
                 isGroupOpen(item.id) ? 'rotate-180' : 'rotate-0',
-              ]"
-            >
+              ]">
               <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
             </svg>
           </button>
 
           <!-- Children -->
-          <div
-            :class="[
-              'overflow-hidden transition-all duration-300 ease-in-out',
-              isGroupOpen(item.id) ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0',
-            ]"
-          >
+          <div :class="[
+            'overflow-hidden transition-all duration-300 ease-in-out',
+            isGroupOpen(item.id) ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0',
+          ]">
             <div class="mt-0.5 ml-3 pl-3 border-l border-white/10 space-y-0.5 pb-1">
-              <RouterLink
-                v-for="child in (item as NavGroup).children"
-                :key="child.to"
-                :to="child.to"
-                @click="$emit('close')"
-                :class="[
+              <RouterLink v-for="child in (item as NavGroup).children" :key="child.to" :to="child.to"
+                @click="$emit('close')" :class="[
                   'flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium w-full',
                   'transition-all duration-200',
                   isChildActive(child.to)
                     ? 'bg-[#fdc710] text-[#04395a] font-semibold'
                     : 'text-white/60 hover:bg-[#068ab8]/60 hover:text-white',
-                ]"
-              >
+                ]">
                 <!-- Dot indicator -->
-                <span
-                  :class="[
-                    'w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-200',
-                    isChildActive(child.to) ? 'bg-[#04395a]' : 'bg-white/30',
-                  ]"
-                />
+                <span :class="[
+                  'w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-200',
+                  isChildActive(child.to) ? 'bg-[#04395a]' : 'bg-white/30',
+                ]" />
                 {{ child.name }}
               </RouterLink>
             </div>
@@ -271,13 +283,60 @@ watch(() => route.path, syncOpenGroups)
       </template>
     </nav>
 
+    <!-- Campaign card -->
+    <div class="px-3 pb-3 shrink-0">
+      <div :class="[
+        'rounded-xl border p-3 transition-all duration-300 bg-white/5',
+        campaignStore.selected ? campaignStatusColors.ring : 'border-white/10',
+      ]">
+        <!-- Header label -->
+        <div class="flex items-center gap-1.5 mb-2">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+            stroke="currentColor" class="w-3.5 h-3.5 text-[#fdc710] shrink-0">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 1 1 0-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 0 1-1.44-4.282m3.102.069a18.03 18.03 0 0 1-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 0 1 8.835 2.535M10.34 6.66a23.847 23.847 0 0 1 8.835-2.535m0 0A23.74 23.74 0 0 1 18.795 3m.38 1.125a23.91 23.91 0 0 1 1.014 5.395m-1.014 8.855c-.118.38-.245.754-.38 1.125m.38-1.125a23.91 23.91 0 0 0 1.014-5.395m0-3.46c.495.413.811 1.035.811 1.73 0 .695-.316 1.317-.811 1.73m0-3.46a24.347 24.347 0 0 1 0 3.46" />
+          </svg>
+          <span class="text-[9px] font-bold tracking-widest uppercase text-white/40">Campaña</span>
+        </div>
+
+        <!-- With campaign -->
+        <template v-if="campaignStore.selected">
+          <p class="text-white text-xs font-semibold leading-snug truncate mb-1.5">
+            {{ campaignStore.selected.name }}
+          </p>
+          <div class="flex items-center gap-1 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+              stroke="currentColor" class="w-3 h-3 text-white/30 shrink-0">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+            </svg>
+            <span class="text-[10px] text-white/40">
+              {{ formatDate(campaignStore.selected.start_date) }}
+              <span class="text-white/20 mx-0.5">→</span>
+              {{ formatDate(campaignStore.selected.end_date) }}
+            </span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span :class="['w-1.5 h-1.5 rounded-full shrink-0', campaignStatusColors.dot]" />
+            <span :class="['text-[10px] font-semibold px-1.5 py-0.5 rounded-full', campaignStatusColors.badge]">
+              {{ campaignStatusLabel }}
+            </span>
+          </div>
+        </template>
+
+        <!-- Without campaign -->
+        <template v-else>
+          <p class="text-white/30 text-[10px] leading-snug">
+            Sin campaña seleccionada.<br>
+            <span class="text-white/20">Elige una desde el encabezado.</span>
+          </p>
+        </template>
+      </div>
+    </div>
+
     <!-- Footer -->
     <div class="px-5 py-3 border-t border-white/10 shrink-0 flex items-center justify-center">
-      <img
-        :src="iglesiaLogo"
-        alt="Iglesia Adventista"
-        class="w-28 h-28 object-contain opacity-30"
-      />
+      <img :src="iglesiaLogo" alt="Iglesia Adventista" class="w-28 h-28 object-contain opacity-30" />
     </div>
   </aside>
 </template>
@@ -288,12 +347,15 @@ watch(() => route.path, syncOpenGroups)
   scrollbar-width: thin;
   scrollbar-color: rgba(255 255 255 / 0.15) transparent;
 }
+
 .scrollbar-thin::-webkit-scrollbar {
   width: 4px;
 }
+
 .scrollbar-thin::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: rgba(255 255 255 / 0.15);
   border-radius: 99px;
@@ -304,6 +366,7 @@ watch(() => route.path, syncOpenGroups)
 .fade-leave-active {
   transition: opacity 0.25s ease;
 }
+
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
