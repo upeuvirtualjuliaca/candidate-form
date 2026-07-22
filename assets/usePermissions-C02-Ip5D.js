@@ -1,1 +1,0 @@
-import{o as e}from"./runtime-core.esm-bundler-CbjRdb_J.js";import{t}from"./index-CkSfEMv4.js";function n(){let{currentRole:n}=t();return{canWrite:e(()=>n.value===`admin`||n.value===`recruiter`),canAdmin:e(()=>n.value===`admin`),isViewer:e(()=>n.value===`viewer`)}}export{n as t};
