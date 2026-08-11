@@ -389,7 +389,7 @@ export async function saveCandidateForm(
 export async function deleteCandidate(id: string): Promise<void> {
   const { error } = await supabase
     .from('candidates')
-    .update({ deleted_at: new Date().toISOString() })
+    .delete()
     .eq('id', id)
   if (error) throw error
 }
