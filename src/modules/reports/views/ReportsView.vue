@@ -88,12 +88,53 @@ interface BaptismRow {
 
 const baptismLoading = ref(false)
 const baptismAll = ref<BaptismRow[]>([])
-const filterDate = ref('')
+const showCompleted = ref(false)
+const showDraft = ref(false)
+const filterDateFrom = ref('')
+const filterDateTo = ref('')
 const filterCampus = ref('')
 const filterFaculty = ref('')
 const filterProgram = ref('')
 const baptismPage = ref(1)
 const PAGE_SIZE = 10
+
+const currentYear = new Date().getFullYear()
+const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
+
+function selectMonth(monthIndex: number) {
+  const firstDay = new Date(currentYear, monthIndex, 1)
+  const lastDay = new Date(currentYear, monthIndex + 1, 0)
+  filterDateFrom.value = firstDay.toISOString().slice(0, 10)
+  filterDateTo.value = lastDay.toISOString().slice(0, 10)
+  baptismPage.value = 1
+}
+
+function clearDateRange() {
+  filterDateFrom.value = ''
+  filterDateTo.value = ''
+  baptismPage.value = 1
+}
+
+const activeMonthPill = computed(() => {
+  if (!filterDateFrom.value || !filterDateTo.value) return null
+  for (let m = 0; m < 12; m++) {
+    const firstDay = new Date(currentYear, m, 1).toISOString().slice(0, 10)
+    const lastDay = new Date(currentYear, m + 1, 0).toISOString().slice(0, 10)
+    if (filterDateFrom.value === firstDay && filterDateTo.value === lastDay) return m
+  }
+  return null
+})
+
+const dateRangeLabel = computed(() => {
+  if (!filterDateFrom.value && !filterDateTo.value) return ''
+  if (activeMonthPill.value !== null) return `${MONTH_NAMES_FULL[activeMonthPill.value]} ${currentYear}`
+  const from = filterDateFrom.value ? fmtDate(filterDateFrom.value) : ''
+  const to = filterDateTo.value ? fmtDate(filterDateTo.value) : ''
+  if (from && to) return `${from} – ${to}`
+  if (from) return `Desde ${from}`
+  return `Hasta ${to}`
+})
 
 async function loadBaptism() {
   baptismLoading.value = true
@@ -148,7 +189,8 @@ function rowProgram(r: BaptismRow) {
 }
 
 function clearFilters() {
-  filterDate.value = ''
+  filterDateFrom.value = ''
+  filterDateTo.value = ''
   filterCampus.value = ''
   filterFaculty.value = ''
   filterProgram.value = ''
@@ -215,7 +257,15 @@ function exportPdf() {
   doc.setFontSize(7.5)
   doc.setTextColor(100, 100, 100)
   const filters: string[] = []
-  if (filterDate.value) filters.push(`Fecha: ${fmtDate(filterDate.value)}`)
+  if (filterDateFrom.value || filterDateTo.value) {
+    if (activeMonthPill.value !== null) {
+      filters.push(`Mes: ${MONTH_NAMES_FULL[activeMonthPill.value]} ${currentYear}`)
+    } else {
+      const from = filterDateFrom.value ? fmtDate(filterDateFrom.value) : '—'
+      const to = filterDateTo.value ? fmtDate(filterDateTo.value) : '—'
+      filters.push(`Periodo: ${from} – ${to}`)
+    }
+  }
   if (filterCampus.value) filters.push(`Campus: ${filterCampus.value}`)
   if (filterFaculty.value) filters.push(`Facultad: ${filterFaculty.value}`)
   if (filterProgram.value) filters.push(`EP: ${filterProgram.value}`)
@@ -274,7 +324,6 @@ function exportPdf() {
 }
 
 // filter options
-const optDates = computed(() => [...new Set(baptismAll.value.map(rowDate))].sort().reverse())
 const optCampuses = computed(() =>
   [...new Set(baptismAll.value.map(rowCampus).filter(Boolean))].sort(),
 )
@@ -303,7 +352,9 @@ watch(filterFaculty, () => {
 // filtered rows
 const baptismFiltered = computed(() => {
   return baptismAll.value.filter((r) => {
-    if (filterDate.value && rowDate(r) !== filterDate.value) return false
+    const d = rowDate(r)
+    if (filterDateFrom.value && d < filterDateFrom.value) return false
+    if (filterDateTo.value && d > filterDateTo.value) return false
     if (filterCampus.value && rowCampus(r) !== filterCampus.value) return false
     if (filterFaculty.value && rowFaculty(r) !== filterFaculty.value) return false
     if (filterProgram.value && rowProgram(r) !== filterProgram.value) return false
@@ -593,17 +644,48 @@ onMounted(loadToday)
               <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
                 Filtros
               </p>
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <!-- Fecha -->
-                <div>
-                  <label class="text-xs text-gray-500 font-medium mb-1 block">Fecha</label>
-                  <select
-                    v-model="filterDate"
-                    class="w-full text-sm rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40"
+
+              <!-- Pills de mes rápido -->
+              <div class="mb-3">
+                <p class="text-xs text-gray-400 mb-2">Mes rápido ({{ currentYear }})</p>
+                <div class="flex flex-wrap gap-1">
+                  <button
+                    v-for="(m, i) in MONTH_LABELS"
+                    :key="i"
+                    type="button"
+                    @click="activeMonthPill === i ? clearDateRange() : selectMonth(i)"
+                    class="px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors"
+                    :class="
+                      activeMonthPill === i
+                        ? 'bg-[#04395a] text-white'
+                        : 'bg-gray-200 text-gray-600 hover:bg-[#04395a]/15 hover:text-[#04395a]'
+                    "
                   >
-                    <option value="">Todas las fechas</option>
-                    <option v-for="d in optDates" :key="d" :value="d">{{ fmtDate(d) }}</option>
-                  </select>
+                    {{ m }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- Inputs de rango + otros filtros -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <!-- Desde -->
+                <div>
+                  <label class="text-xs text-gray-500 font-medium mb-1 block">Desde</label>
+                  <input
+                    type="date"
+                    v-model="filterDateFrom"
+                    class="w-full text-sm rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40"
+                  />
+                </div>
+
+                <!-- Hasta -->
+                <div>
+                  <label class="text-xs text-gray-500 font-medium mb-1 block">Hasta</label>
+                  <input
+                    type="date"
+                    v-model="filterDateTo"
+                    class="w-full text-sm rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40"
+                  />
                 </div>
 
                 <!-- Campus -->
@@ -632,9 +714,7 @@ onMounted(loadToday)
 
                 <!-- EP -->
                 <div>
-                  <label class="text-xs text-gray-500 font-medium mb-1 block"
-                    >Escuela Profesional</label
-                  >
+                  <label class="text-xs text-gray-500 font-medium mb-1 block">Escuela Profesional</label>
                   <select
                     v-model="filterProgram"
                     class="w-full text-sm rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40"
@@ -644,18 +724,19 @@ onMounted(loadToday)
                   </select>
                 </div>
               </div>
+
               <!-- Active filters + clear -->
               <div
-                v-if="filterDate || filterCampus || filterFaculty || filterProgram"
+                v-if="filterDateFrom || filterDateTo || filterCampus || filterFaculty || filterProgram"
                 class="flex items-center gap-2 mt-3 flex-wrap"
               >
                 <span class="text-xs text-gray-400">Filtros activos:</span>
                 <span
-                  v-if="filterDate"
+                  v-if="dateRangeLabel"
                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-[#04395a]/10 text-[#04395a] font-medium"
                 >
-                  {{ fmtDate(filterDate) }}
-                  <button @click="filterDate = ''" class="hover:text-red-500">×</button>
+                  {{ dateRangeLabel }}
+                  <button @click="clearDateRange()" class="hover:text-red-500">×</button>
                 </span>
                 <span
                   v-if="filterCampus"
@@ -717,7 +798,9 @@ onMounted(loadToday)
               </div>
 
               <div
-                class="relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-emerald-100/60 p-4"
+                class="relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-emerald-100/60 p-4 cursor-pointer select-none"
+                @click="showCompleted = !showCompleted"
+                title="Clic para revelar"
               >
                 <div class="flex items-center justify-between mb-2">
                   <span
@@ -725,6 +808,7 @@ onMounted(loadToday)
                     >Completadas</span
                   >
                   <svg
+                    v-if="showCompleted"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -732,20 +816,30 @@ onMounted(loadToday)
                     stroke="#10b981"
                     class="w-4 h-4"
                   >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                    />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                  </svg>
+                  <svg
+                    v-else
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="#10b981"
+                    class="w-4 h-4 opacity-50"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
                   </svg>
                 </div>
-                <p class="text-3xl font-bold text-emerald-700">{{ bCompleted }}</p>
+                <p v-if="showCompleted" class="text-3xl font-bold text-emerald-700">{{ bCompleted }}</p>
+                <p v-else class="text-3xl font-bold text-emerald-300 tracking-widest">••••</p>
                 <p class="text-xs text-emerald-600/70 mt-0.5">Bautizados</p>
                 <div class="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-emerald-500/5" />
               </div>
 
               <div
-                class="relative overflow-hidden rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-amber-100/60 p-4"
+                class="relative overflow-hidden rounded-2xl border border-amber-100 bg-gradient-to-br from-amber-50 to-amber-100/60 p-4 cursor-pointer select-none"
+                @click="showDraft = !showDraft"
+                title="Clic para revelar"
               >
                 <div class="flex items-center justify-between mb-2">
                   <span
@@ -753,6 +847,7 @@ onMounted(loadToday)
                     >Pendientes</span
                   >
                   <svg
+                    v-if="showDraft"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="none"
                     viewBox="0 0 24 24"
@@ -760,14 +855,22 @@ onMounted(loadToday)
                     stroke="#f59e0b"
                     class="w-4 h-4"
                   >
-                    <path
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                    />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.964-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                  </svg>
+                  <svg
+                    v-else
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="#f59e0b"
+                    class="w-4 h-4 opacity-50"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
                   </svg>
                 </div>
-                <p class="text-3xl font-bold text-amber-700">{{ bDraft }}</p>
+                <p v-if="showDraft" class="text-3xl font-bold text-amber-700">{{ bDraft }}</p>
+                <p v-else class="text-3xl font-bold text-amber-300 tracking-widest">••••</p>
                 <p class="text-xs text-amber-600/70 mt-0.5">Borradores</p>
                 <div class="absolute -right-3 -bottom-3 w-16 h-16 rounded-full bg-amber-500/5" />
               </div>
