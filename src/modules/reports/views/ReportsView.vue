@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePermissions } from '@/composables/usePermissions'
 import { useCampaignStore } from '@/modules/campaigns/store/campaign.store'
+import type { Campaign } from '@/modules/campaigns/services/campaigns.service'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -69,6 +70,7 @@ interface BaptismRow {
   id: string
   status: string
   created_at: string
+  campaign_id: string | null
   students: {
     full_name: string | null
     dni: string | null
@@ -90,45 +92,57 @@ const baptismLoading = ref(false)
 const baptismAll = ref<BaptismRow[]>([])
 const showCompleted = ref(false)
 const showDraft = ref(false)
+const allCampaigns = ref<Campaign[]>([])
+const filterCampaignId = ref('')
 const filterDateFrom = ref('')
 const filterDateTo = ref('')
+const selectedMonths = ref<number[]>([])
 const filterCampus = ref('')
 const filterFaculty = ref('')
 const filterProgram = ref('')
 const baptismPage = ref(1)
 const PAGE_SIZE = 10
 
+async function loadCampaigns() {
+  const { data, error } = await supabase
+    .from('campaigns')
+    .select('id, name, start_date, end_date, is_active, created_at')
+    .order('created_at', { ascending: false })
+  if (!error) allCampaigns.value = (data ?? []) as Campaign[]
+}
+
 const currentYear = new Date().getFullYear()
 const MONTH_LABELS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 
-function selectMonth(monthIndex: number) {
-  const firstDay = new Date(currentYear, monthIndex, 1)
-  const lastDay = new Date(currentYear, monthIndex + 1, 0)
-  filterDateFrom.value = firstDay.toISOString().slice(0, 10)
-  filterDateTo.value = lastDay.toISOString().slice(0, 10)
-  baptismPage.value = 1
-}
-
-function clearDateRange() {
+function toggleMonth(monthIndex: number) {
+  const idx = selectedMonths.value.indexOf(monthIndex)
+  selectedMonths.value = idx === -1
+    ? [...selectedMonths.value, monthIndex]
+    : selectedMonths.value.filter((m) => m !== monthIndex)
   filterDateFrom.value = ''
   filterDateTo.value = ''
   baptismPage.value = 1
 }
 
-const activeMonthPill = computed(() => {
-  if (!filterDateFrom.value || !filterDateTo.value) return null
-  for (let m = 0; m < 12; m++) {
-    const firstDay = new Date(currentYear, m, 1).toISOString().slice(0, 10)
-    const lastDay = new Date(currentYear, m + 1, 0).toISOString().slice(0, 10)
-    if (filterDateFrom.value === firstDay && filterDateTo.value === lastDay) return m
-  }
-  return null
+function clearDateRange() {
+  selectedMonths.value = []
+  filterDateFrom.value = ''
+  filterDateTo.value = ''
+  baptismPage.value = 1
+}
+
+// Si el usuario escribe un rango manual, deselecciona los pills
+watch([filterDateFrom, filterDateTo], ([from, to]) => {
+  if (from || to) selectedMonths.value = []
 })
 
 const dateRangeLabel = computed(() => {
+  if (selectedMonths.value.length > 0) {
+    const sorted = [...selectedMonths.value].sort((a, b) => a - b)
+    return sorted.map((m) => MONTH_LABELS[m]).join(', ') + ` ${currentYear}`
+  }
   if (!filterDateFrom.value && !filterDateTo.value) return ''
-  if (activeMonthPill.value !== null) return `${MONTH_NAMES_FULL[activeMonthPill.value]} ${currentYear}`
   const from = filterDateFrom.value ? fmtDate(filterDateFrom.value) : ''
   const to = filterDateTo.value ? fmtDate(filterDateTo.value) : ''
   if (from && to) return `${from} – ${to}`
@@ -141,22 +155,17 @@ async function loadBaptism() {
   baptismPage.value = 1
   clearFilters()
   try {
-    let query = supabase
+    const { data, error } = await supabase
       .from('candidates')
       .select(
         `
-        id, status, created_at,
+        id, status, created_at, campaign_id,
         students ( full_name, dni, phone, campus, faculty, program ),
         teachers ( full_name, dni, campus, faculty, main_ep )
       `,
       )
       .order('created_at', { ascending: false })
 
-    if (selectedCampaign.value?.id) {
-      query = query.eq('campaign_id', selectedCampaign.value.id)
-    }
-
-    const { data, error } = await query
     if (error) throw error
     baptismAll.value = (data ?? []) as unknown as BaptismRow[]
   } finally {
@@ -166,12 +175,6 @@ async function loadBaptism() {
 
 watch(activeTab, (tab) => {
   if (tab === 'baptism' && !baptismLoading.value) loadBaptism()
-})
-
-// Reload baptism data when campaign changes
-watch(selectedCampaign, () => {
-  if (activeTab.value === 'baptism') loadBaptism()
-  else baptismAll.value = [] // force reload on next tab switch
 })
 
 // helpers
@@ -189,6 +192,8 @@ function rowProgram(r: BaptismRow) {
 }
 
 function clearFilters() {
+  filterCampaignId.value = ''
+  selectedMonths.value = []
   filterDateFrom.value = ''
   filterDateTo.value = ''
   filterCampus.value = ''
@@ -257,14 +262,17 @@ function exportPdf() {
   doc.setFontSize(7.5)
   doc.setTextColor(100, 100, 100)
   const filters: string[] = []
-  if (filterDateFrom.value || filterDateTo.value) {
-    if (activeMonthPill.value !== null) {
-      filters.push(`Mes: ${MONTH_NAMES_FULL[activeMonthPill.value]} ${currentYear}`)
-    } else {
-      const from = filterDateFrom.value ? fmtDate(filterDateFrom.value) : '—'
-      const to = filterDateTo.value ? fmtDate(filterDateTo.value) : '—'
-      filters.push(`Periodo: ${from} – ${to}`)
-    }
+  if (filterCampaignId.value) {
+    const camp = allCampaigns.value.find((c) => c.id === filterCampaignId.value)
+    filters.push(`Campaña: ${camp?.name ?? filterCampaignId.value}`)
+  }
+  if (selectedMonths.value.length > 0) {
+    const sorted = [...selectedMonths.value].sort((a, b) => a - b)
+    filters.push(`Meses: ${sorted.map((m) => MONTH_NAMES_FULL[m]).join(', ')} ${currentYear}`)
+  } else if (filterDateFrom.value || filterDateTo.value) {
+    const from = filterDateFrom.value ? fmtDate(filterDateFrom.value) : '—'
+    const to = filterDateTo.value ? fmtDate(filterDateTo.value) : '—'
+    filters.push(`Periodo: ${from} – ${to}`)
   }
   if (filterCampus.value) filters.push(`Campus: ${filterCampus.value}`)
   if (filterFaculty.value) filters.push(`Facultad: ${filterFaculty.value}`)
@@ -352,9 +360,16 @@ watch(filterFaculty, () => {
 // filtered rows
 const baptismFiltered = computed(() => {
   return baptismAll.value.filter((r) => {
-    const d = rowDate(r)
-    if (filterDateFrom.value && d < filterDateFrom.value) return false
-    if (filterDateTo.value && d > filterDateTo.value) return false
+    if (filterCampaignId.value && r.campaign_id !== filterCampaignId.value) return false
+    // Filtro de fecha: pills de mes (multi) tienen prioridad sobre rango manual
+    if (selectedMonths.value.length > 0) {
+      const month = parseInt(rowDate(r).slice(5, 7), 10) - 1 // 0-indexed
+      if (!selectedMonths.value.includes(month)) return false
+    } else {
+      const d = rowDate(r)
+      if (filterDateFrom.value && d < filterDateFrom.value) return false
+      if (filterDateTo.value && d > filterDateTo.value) return false
+    }
     if (filterCampus.value && rowCampus(r) !== filterCampus.value) return false
     if (filterFaculty.value && rowFaculty(r) !== filterFaculty.value) return false
     if (filterProgram.value && rowProgram(r) !== filterProgram.value) return false
@@ -430,7 +445,10 @@ const chartOpts = {
   },
 }
 
-onMounted(loadToday)
+onMounted(() => {
+  loadToday()
+  loadCampaigns()
+})
 </script>
 
 <template>
@@ -645,19 +663,38 @@ onMounted(loadToday)
                 Filtros
               </p>
 
-              <!-- Pills de mes rápido -->
+              <!-- Select de Campaña -->
               <div class="mb-3">
-                <p class="text-xs text-gray-400 mb-2">Mes rápido ({{ currentYear }})</p>
+                <label class="text-xs text-gray-500 font-medium mb-1 block">Campaña</label>
+                <select
+                  v-model="filterCampaignId"
+                  class="w-full sm:w-72 text-sm rounded-xl border border-gray-200 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#04395a]/20 focus:border-[#04395a]/40"
+                >
+                  <option value="">Todas las campañas</option>
+                  <option v-for="c in allCampaigns" :key="c.id" :value="c.id">
+                    {{ c.name }}{{ c.is_active ? ' (activa)' : '' }}
+                  </option>
+                </select>
+              </div>
+
+              <!-- Pills de mes (multi-selección) -->
+              <div class="mb-3">
+                <p class="text-xs text-gray-400 mb-2">
+                  Meses ({{ currentYear }})
+                  <span v-if="selectedMonths.length > 0" class="ml-1 text-[#04395a] font-semibold">
+                    · {{ selectedMonths.length }} seleccionado{{ selectedMonths.length > 1 ? 's' : '' }}
+                  </span>
+                </p>
                 <div class="flex flex-wrap gap-1">
                   <button
                     v-for="(m, i) in MONTH_LABELS"
                     :key="i"
                     type="button"
-                    @click="activeMonthPill === i ? clearDateRange() : selectMonth(i)"
+                    @click="toggleMonth(i)"
                     class="px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors"
                     :class="
-                      activeMonthPill === i
-                        ? 'bg-[#04395a] text-white'
+                      selectedMonths.includes(i)
+                        ? 'bg-[#04395a] text-white ring-2 ring-[#04395a]/30'
                         : 'bg-gray-200 text-gray-600 hover:bg-[#04395a]/15 hover:text-[#04395a]'
                     "
                   >
@@ -727,10 +764,17 @@ onMounted(loadToday)
 
               <!-- Active filters + clear -->
               <div
-                v-if="filterDateFrom || filterDateTo || filterCampus || filterFaculty || filterProgram"
+                v-if="filterCampaignId || selectedMonths.length > 0 || filterDateFrom || filterDateTo || filterCampus || filterFaculty || filterProgram"
                 class="flex items-center gap-2 mt-3 flex-wrap"
               >
                 <span class="text-xs text-gray-400">Filtros activos:</span>
+                <span
+                  v-if="filterCampaignId"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-[#04395a]/10 text-[#04395a] font-medium"
+                >
+                  {{ allCampaigns.find((c) => c.id === filterCampaignId)?.name ?? 'Campaña' }}
+                  <button @click="filterCampaignId = ''" class="hover:text-red-500">×</button>
+                </span>
                 <span
                   v-if="dateRangeLabel"
                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-[#04395a]/10 text-[#04395a] font-medium"
