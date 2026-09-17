@@ -453,7 +453,7 @@ function drawIdentificationSection(doc: jsPDF, startY: number, c: CandidateDetai
   drawCell(doc, cx + sedeW, y, progW, R, '', {
     label: 'Ciudad, provincia/región, país de residencia',
   })
-  drawCell(doc, cx + sedeW + progW, y, cpW, R, v(s?.postal_code), { label: 'Código postal' })
+  drawCell(doc, cx + sedeW + progW, y, cpW, R, v(c.students?.postal_code), { label: 'Código postal' })
   y += R
 
   // ── Row 6: Teléfono | Correo institucional | Facultad ────────────────────
@@ -461,7 +461,7 @@ function drawIdentificationSection(doc: jsPDF, startY: number, c: CandidateDetai
   const mailW = 87
   const facW = cw - telW - mailW // 40 mm
   drawCell(doc, cx, y, telW, R, v(s?.phone), { label: 'Teléfono / Celular', fill: row2Fill })
-  drawCell(doc, cx + telW, y, mailW, R, v(s?.institutional_email), {
+  drawCell(doc, cx + telW, y, mailW, R, v(c.students?.institutional_email), {
     label: 'Correo electrónico institucional',
     fill: row2Fill,
   })
@@ -543,11 +543,11 @@ function drawIdentificationSection(doc: jsPDF, startY: number, c: CandidateDetai
   doc.line(cx + eduW, y, cx + eduW, y + R2)
 
   // labels + contenido
-  drawCell(doc, cx + eduW, y, profW, R2, v(s?.program), {
+  drawCell(doc, cx + eduW, y, profW, R2, v(c.students?.program), {
     label: 'Profesión / Formación académica',
   })
 
-  drawCell(doc, cx + eduW, y + R2, profW, R2, v(s?.modality), {
+  drawCell(doc, cx + eduW, y + R2, profW, R2, v(c.students?.modality), {
     label: 'Ocupación actual',
   })
 

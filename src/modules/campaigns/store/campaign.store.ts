@@ -14,7 +14,7 @@ export const useCampaignStore = defineStore('campaign', () => {
   let   notifTimer   = 0
 
   function todayIso(): string {
-    return new Date().toISOString().split('T')[0]
+    return new Date().toISOString().slice(0, 10)
   }
 
   // Función de validación — llamada directa, sin refs ni computeds

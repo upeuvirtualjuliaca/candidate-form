@@ -101,7 +101,8 @@ const filterCampus = ref('')
 const filterFaculty = ref('')
 const filterProgram = ref('')
 const baptismPage = ref(1)
-const PAGE_SIZE = 10
+const baptismPageSize = ref(5)
+const PAGE_SIZE = baptismPageSize
 
 async function loadCampaigns() {
   const { data, error } = await supabase
@@ -378,11 +379,12 @@ const baptismFiltered = computed(() => {
 })
 
 watch(baptismFiltered, () => { baptismPage.value = 1 })
+watch(baptismPageSize, () => { baptismPage.value = 1 })
 
-const baptismTotalPages = computed(() => Math.ceil(baptismFiltered.value.length / PAGE_SIZE))
+const baptismTotalPages = computed(() => Math.ceil(baptismFiltered.value.length / PAGE_SIZE.value))
 const baptismPaged = computed(() => {
-  const start = (baptismPage.value - 1) * PAGE_SIZE
-  return baptismFiltered.value.slice(start, start + PAGE_SIZE)
+  const start = (baptismPage.value - 1) * PAGE_SIZE.value
+  return baptismFiltered.value.slice(start, start + PAGE_SIZE.value)
 })
 
 // summary cards
@@ -1132,7 +1134,7 @@ onMounted(() => {
                       :key="row.id"
                       class="border-b border-gray-50 hover:bg-gray-50/70 transition-colors"
                     >
-                      <td class="py-2.5 px-4 text-xs text-gray-400">{{ (baptismPage - 1) * PAGE_SIZE + i + 1 }}</td>
+                      <td class="py-2.5 px-4 text-xs text-gray-400">{{ (baptismPage - 1) * baptismPageSize + i + 1 }}</td>
                       <!-- Tipo badge -->
                       <td class="py-2.5 px-4">
                         <span
@@ -1186,32 +1188,46 @@ onMounted(() => {
                   </tbody>
                 </table>
 
+                <!-- Selector de registros por página -->
+                <div class="flex items-center justify-end px-4 py-2 border-t border-gray-100 gap-2">
+                  <span class="text-xs text-gray-500">Registros por página:</span>
+                  <select
+                    v-model="baptismPageSize"
+                    class="text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  >
+                    <option :value="5">5</option>
+                    <option :value="10">10</option>
+                    <option :value="15">15</option>
+                    <option :value="20">20</option>
+                  </select>
+                </div>
+
                 <!-- Paginación -->
                 <div
                   v-if="baptismTotalPages > 1"
                   class="flex items-center justify-between px-4 py-3 border-t border-gray-100"
                 >
-                  <p class="text-xs text-gray-400">
-                    {{ (baptismPage - 1) * PAGE_SIZE + 1 }}–{{ Math.min(baptismPage * PAGE_SIZE, bTotal) }}
+                  <p class="text-sm text-gray-500">
+                    {{ (baptismPage - 1) * baptismPageSize + 1 }}–{{ Math.min(baptismPage * baptismPageSize, bTotal) }}
                     de {{ bTotal }}
                   </p>
-                  <div class="flex items-center gap-1">
+                  <div class="flex items-center gap-2">
                     <button
                       type="button"
                       :disabled="baptismPage === 1"
                       @click="baptismPage--"
-                      class="px-2.5 py-1 rounded-lg text-xs font-medium border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      class="px-4 py-2 rounded-lg text-sm font-semibold border border-blue-500 bg-blue-500 text-white hover:bg-blue-600 hover:border-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       ‹ Anterior
                     </button>
-                    <span class="px-3 py-1 text-xs text-gray-600 font-medium">
+                    <span class="px-3 py-2 text-sm text-gray-600 font-medium">
                       {{ baptismPage }} / {{ baptismTotalPages }}
                     </span>
                     <button
                       type="button"
                       :disabled="baptismPage === baptismTotalPages"
                       @click="baptismPage++"
-                      class="px-2.5 py-1 rounded-lg text-xs font-medium border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      class="px-4 py-2 rounded-lg text-sm font-semibold border border-blue-500 bg-blue-500 text-white hover:bg-blue-600 hover:border-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >
                       Siguiente ›
                     </button>

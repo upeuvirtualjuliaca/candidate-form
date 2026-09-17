@@ -292,7 +292,7 @@ export async function updateStudentPersonalData(
   if (error) throw error
 }
 
-export async function createCandidateFromStudent(studentId: string, campaignId?: string | null): Promise<{ id: string; existed: boolean }> {
+export async function createCandidateFromStudent(studentId: string, campaignId?: string | null, createdByName?: string | null): Promise<{ id: string; existed: boolean }> {
   // Verificar si ya existe una ficha activa (no eliminada) para este estudiante
   const { data: existing } = await supabase
     .from('candidates')
@@ -305,7 +305,7 @@ export async function createCandidateFromStudent(studentId: string, campaignId?:
 
   const { data, error } = await supabase
     .from('candidates')
-    .insert({ student_id: studentId, status: 'draft', campaign_id: campaignId ?? null })
+    .insert({ student_id: studentId, status: 'draft', campaign_id: campaignId ?? null, created_by_name: createdByName ?? null })
     .select('id')
     .single()
 

@@ -25,6 +25,7 @@ import { searchPastors, getPastorByProgramName, type Pastor } from '@/modules/pa
 import FieldStatus from '@/modules/candidates/components/FieldStatus.vue'
 import SignaturePad from '@/components/ui/SignaturePad.vue'
 import { getPrincipalActiveSecretary } from '@/modules/secretaries/services/secretaries.service'
+import { getActiveCampaign } from '@/modules/campaigns/services/campaigns.service'
 
 const route = useRoute()
 const router = useRouter()
@@ -348,7 +349,14 @@ async function loadDetail() {
     administrativeMeetingDate.value =
       data.administrative_meeting_date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
     ceremonyNotes.value = data.ceremony_notes ?? ''
-    ceremonyVoto.value  = data.ceremony_voto ?? '18'
+    if (data.ceremony_voto) {
+      ceremonyVoto.value = data.ceremony_voto
+    } else {
+      const activeCampaign = await getActiveCampaign()
+      ceremonyVoto.value = activeCampaign?.vote_number != null
+        ? String(activeCampaign.vote_number)
+        : '18'
+    }
     if (data.officiating_pastor) {
       pastorQuery.value = data.officiating_pastor
       if (data.officiating_pastor_dni) {

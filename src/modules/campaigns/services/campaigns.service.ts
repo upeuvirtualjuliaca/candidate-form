@@ -3,12 +3,13 @@ import { supabase } from '@/core/supabase'
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface Campaign {
-  id:         string
-  name:       string
-  start_date: string   // YYYY-MM-DD
-  end_date:   string   // YYYY-MM-DD
-  is_active:  boolean
-  created_at: string
+  id:          string
+  name:        string
+  start_date:  string   // YYYY-MM-DD
+  end_date:    string   // YYYY-MM-DD
+  is_active:   boolean
+  created_at:  string
+  vote_number: number | null
 }
 
 export interface PaginatedCampaigns {
@@ -16,7 +17,7 @@ export interface PaginatedCampaigns {
   count: number
 }
 
-const CAMPAIGN_SELECT = `id, name, start_date, end_date, is_active, created_at`
+const CAMPAIGN_SELECT = `id, name, start_date, end_date, is_active, created_at, vote_number`
 
 // ── CRUD ───────────────────────────────────────────────────────────────────
 
@@ -51,14 +52,28 @@ export async function getActiveCampaign(): Promise<Campaign | null> {
   return (data ?? null) as Campaign | null
 }
 
+/** Returns the highest vote_number stored across all campaigns, or null if none. */
+export async function getMaxVoteNumber(): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('campaigns')
+    .select('vote_number')
+    .not('vote_number', 'is', null)
+    .order('vote_number', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return (data as any)?.vote_number ?? null
+}
+
 /**
  * Creates a new campaign and marks it as the active one.
  * Any previously active campaign is automatically deactivated.
  */
 export async function createCampaign(payload: {
-  name:       string
-  start_date: string
-  end_date:   string
+  name:        string
+  start_date:  string
+  end_date:    string
+  vote_number: number | null
 }): Promise<Campaign> {
   // Deactivate current active campaign (if any)
   const { error: deactivateError } = await supabase
@@ -70,10 +85,11 @@ export async function createCampaign(payload: {
   const { data, error } = await supabase
     .from('campaigns')
     .insert({
-      name:       payload.name.trim(),
-      start_date: payload.start_date,
-      end_date:   payload.end_date,
-      is_active:  true,
+      name:        payload.name.trim(),
+      start_date:  payload.start_date,
+      end_date:    payload.end_date,
+      is_active:   true,
+      vote_number: payload.vote_number,
     })
     .select(CAMPAIGN_SELECT)
     .single()
@@ -84,14 +100,15 @@ export async function createCampaign(payload: {
 
 export async function updateCampaign(
   id:      string,
-  payload: { name: string; start_date: string; end_date: string },
+  payload: { name: string; start_date: string; end_date: string; vote_number: number | null },
 ): Promise<Campaign> {
   const { data, error } = await supabase
     .from('campaigns')
     .update({
-      name:       payload.name.trim(),
-      start_date: payload.start_date,
-      end_date:   payload.end_date,
+      name:        payload.name.trim(),
+      start_date:  payload.start_date,
+      end_date:    payload.end_date,
+      vote_number: payload.vote_number,
     })
     .eq('id', id)
     .select(CAMPAIGN_SELECT)
@@ -142,7 +159,7 @@ export async function isCampaignActiveAndValid(): Promise<{
     return { allowed: false, reason: 'No hay ninguna campaña activa configurada.' }
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toISOString().slice(0, 10)
 
   if (today < campaign.start_date) {
     return {

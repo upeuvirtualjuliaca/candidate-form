@@ -14,17 +14,15 @@ import {
   type CandidateStatus,
 } from '@/modules/candidates/services/candidates.service'
 import { useCampaignStore } from '@/modules/campaigns/store/campaign.store'
+import { useAuthStore } from '@/modules/auth/store/auth.store'
 import { searchStudents, type Student } from '@/modules/students/services/students.service'
-import { supabase } from '@/core/supabase'
 
 const router = useRouter()
 const toast = useToastStore()
 const { canWrite } = usePermissions()
 const campaignStore = useCampaignStore()
 const { selected: selectedCampaign } = storeToRefs(campaignStore)
-
-// Nombre del usuario actual (igual que ValidationView)
-const currentUserName = ref<string | null>(null)
+const { currentUserName } = useAuthStore()
 
 // ── Tabs ───────────────────────────────────────────────────────────────────
 
@@ -163,19 +161,8 @@ async function executeDelete() {
 }
 
 watch([listPage, listPageSize], loadList)
-onMounted(async () => {
+onMounted(() => {
   loadList()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (user) {
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('full_name, email')
-      .eq('id', user.id)
-      .maybeSingle()
-    currentUserName.value = profile?.full_name ?? profile?.email ?? user.email ?? null
-  }
 })
 
 // ── Drafts tab ─────────────────────────────────────────────────────────────

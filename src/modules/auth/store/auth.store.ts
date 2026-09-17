@@ -4,17 +4,19 @@ import type { User } from '@supabase/supabase-js'
 
 export type UserRole = 'admin' | 'recruiter' | 'viewer'
 
-const currentUser = ref<User | null>(null)
-const currentRole = ref<UserRole | null>(null)
-const initialized = ref(false)
+const currentUser     = ref<User | null>(null)
+const currentRole     = ref<UserRole | null>(null)
+const currentUserName = ref<string | null>(null)
+const initialized     = ref(false)
 
 async function loadRole(userId: string) {
   const { data } = await supabase
     .from('user_profiles')
-    .select('role')
+    .select('role, full_name, email')
     .eq('id', userId)
     .single()
-  currentRole.value = (data?.role as UserRole) ?? null
+  currentRole.value     = (data?.role as UserRole) ?? null
+  currentUserName.value = (data as any)?.full_name ?? (data as any)?.email ?? null
 }
 
 export function useAuthStore() {
@@ -48,9 +50,10 @@ export function useAuthStore() {
 
   async function signOut() {
     await supabase.auth.signOut()
-    currentUser.value = null
-    currentRole.value = null
+    currentUser.value     = null
+    currentRole.value     = null
+    currentUserName.value = null
   }
 
-  return { currentUser, currentRole, initialized, init, signIn, signOut }
+  return { currentUser, currentRole, currentUserName, initialized, init, signIn, signOut }
 }

@@ -7,6 +7,7 @@ import {
   updateCampaign,
   deleteCampaign,
   setActiveCampaign,
+  getMaxVoteNumber,
   type Campaign,
 } from '../services/campaigns.service'
 
@@ -29,7 +30,7 @@ function formatDate(iso: string): string {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().split('T')[0]
+  return new Date().toISOString().slice(0, 10)
 }
 
 // ── Campaign status label ──────────────────────────────────────────────────
@@ -96,18 +97,29 @@ async function handleSetActive(c: Campaign) {
 }
 
 // ── Nueva campaña ──────────────────────────────────────────────────────────
-const newName      = ref('')
-const newStartDate = ref('')
-const newEndDate   = ref('')
-const newSaving    = ref(false)
-const newError     = ref('')
-const newSuccess   = ref(false)
+const newName       = ref('')
+const newStartDate  = ref('')
+const newEndDate    = ref('')
+const newVoteNumber = ref<number | null>(null)
+const newSaving     = ref(false)
+const newError      = ref('')
+const newSuccess    = ref(false)
+
+async function loadNextVoteNumber() {
+  try {
+    const max = await getMaxVoteNumber()
+    newVoteNumber.value = max !== null ? max + 1 : 1
+  } catch {
+    newVoteNumber.value = null
+  }
+}
 
 function resetNewForm() {
   newName.value      = ''
   newStartDate.value = ''
   newEndDate.value   = ''
   newError.value     = ''
+  loadNextVoteNumber()
 }
 
 async function handleCreate() {
@@ -132,9 +144,10 @@ async function handleCreate() {
   try {
     newSaving.value = true
     await createCampaign({
-      name:       newName.value,
-      start_date: newStartDate.value,
-      end_date:   newEndDate.value,
+      name:        newName.value,
+      start_date:  newStartDate.value,
+      end_date:    newEndDate.value,
+      vote_number: newVoteNumber.value,
     })
     newSuccess.value = true
     resetNewForm()
@@ -149,21 +162,23 @@ async function handleCreate() {
 }
 
 // ── Edit modal ─────────────────────────────────────────────────────────────
-const editOpen      = ref(false)
-const editId        = ref('')
-const editName      = ref('')
-const editStartDate = ref('')
-const editEndDate   = ref('')
-const editSaving    = ref(false)
-const editError     = ref('')
+const editOpen       = ref(false)
+const editId         = ref('')
+const editName       = ref('')
+const editStartDate  = ref('')
+const editEndDate    = ref('')
+const editVoteNumber = ref<number | null>(null)
+const editSaving     = ref(false)
+const editError      = ref('')
 
 function openEdit(c: Campaign) {
-  editId.value        = c.id
-  editName.value      = c.name
-  editStartDate.value = c.start_date
-  editEndDate.value   = c.end_date
-  editError.value     = ''
-  editOpen.value      = true
+  editId.value         = c.id
+  editName.value       = c.name
+  editStartDate.value  = c.start_date
+  editEndDate.value    = c.end_date
+  editVoteNumber.value = c.vote_number
+  editError.value      = ''
+  editOpen.value       = true
 }
 
 function closeEdit() {
@@ -192,9 +207,10 @@ async function handleUpdate() {
   try {
     editSaving.value = true
     await updateCampaign(editId.value, {
-      name:       editName.value,
-      start_date: editStartDate.value,
-      end_date:   editEndDate.value,
+      name:        editName.value,
+      start_date:  editStartDate.value,
+      end_date:    editEndDate.value,
+      vote_number: editVoteNumber.value,
     })
     closeEdit()
     await loadList()
@@ -241,7 +257,14 @@ async function handleDelete() {
 }
 
 // ── Init ───────────────────────────────────────────────────────────────────
-onMounted(loadList)
+watch(activeTab, (tab) => {
+  if (tab === 'new') loadNextVoteNumber()
+})
+
+onMounted(() => {
+  loadList()
+  loadNextVoteNumber()
+})
 </script>
 
 <template>
@@ -317,6 +340,7 @@ onMounted(loadList)
                 <thead>
                   <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
                     <th class="px-4 py-3 text-left font-medium">Campaña</th>
+                    <th class="px-4 py-3 text-left font-medium">N° Voto</th>
                     <th class="px-4 py-3 text-left font-medium">Inicio</th>
                     <th class="px-4 py-3 text-left font-medium">Fin</th>
                     <th class="px-4 py-3 text-left font-medium">Estado</th>
@@ -342,6 +366,9 @@ onMounted(loadList)
                         />
                         {{ c.name }}
                       </div>
+                    </td>
+                    <td class="px-4 py-3 text-gray-700 font-medium">
+                      {{ c.vote_number ?? '—' }}
                     </td>
                     <td class="px-4 py-3 text-gray-600">{{ formatDate(c.start_date) }}</td>
                     <td class="px-4 py-3 text-gray-600">{{ formatDate(c.end_date) }}</td>
@@ -418,6 +445,9 @@ onMounted(loadList)
                     </p>
                     <p class="text-xs text-gray-500 mt-1">
                       {{ formatDate(c.start_date) }} — {{ formatDate(c.end_date) }}
+                    </p>
+                    <p v-if="c.vote_number != null" class="text-xs text-gray-400 mt-0.5">
+                      Voto N° {{ c.vote_number }}
                     </p>
                   </div>
                   <span
@@ -566,6 +596,21 @@ onMounted(loadList)
               </div>
             </div>
 
+            <!-- Vote number -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                Número de voto
+                <span class="ml-1 text-xs text-gray-400 font-normal">(secuencia de bautismo)</span>
+              </label>
+              <input
+                v-model.number="newVoteNumber"
+                type="number"
+                min="1"
+                placeholder="Ej: 19"
+                class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#04395a]/30 focus:border-[#04395a] transition-colors"
+              />
+            </div>
+
             <!-- Actions -->
             <div class="flex items-center gap-3 pt-1">
               <button
@@ -671,6 +716,20 @@ onMounted(loadList)
                     class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#04395a]/30 focus:border-[#04395a] transition-colors"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                  Número de voto
+                  <span class="ml-1 text-xs text-gray-400 font-normal">(secuencia de bautismo)</span>
+                </label>
+                <input
+                  v-model.number="editVoteNumber"
+                  type="number"
+                  min="1"
+                  placeholder="Ej: 19"
+                  class="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#04395a]/30 focus:border-[#04395a] transition-colors"
+                />
               </div>
 
               <div class="flex gap-3 pt-1">

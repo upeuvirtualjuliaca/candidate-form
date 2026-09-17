@@ -72,7 +72,7 @@ function formatDateShort(iso: string): string {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().split('T')[0]
+  return new Date().toISOString().slice(0, 10)
 }
 
 function campaignStatus(c: Campaign): 'vigente' | 'vencida' | 'pendiente' | 'inactiva' {

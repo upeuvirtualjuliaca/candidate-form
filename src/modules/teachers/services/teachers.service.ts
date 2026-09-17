@@ -120,7 +120,7 @@ export async function updateTeacherPersonalData(
   if (error) throw error
 }
 
-export async function createCandidateFromTeacher(teacherId: string, campaignId?: string | null): Promise<{ id: string; existed: boolean }> {
+export async function createCandidateFromTeacher(teacherId: string, campaignId?: string | null, createdByName?: string | null): Promise<{ id: string; existed: boolean }> {
   const { data: existing } = await supabase
     .from('candidates')
     .select('id')
@@ -132,7 +132,7 @@ export async function createCandidateFromTeacher(teacherId: string, campaignId?:
 
   const { data, error } = await supabase
     .from('candidates')
-    .insert({ teacher_id: teacherId, status: 'draft', campaign_id: campaignId ?? null })
+    .insert({ teacher_id: teacherId, status: 'draft', campaign_id: campaignId ?? null, created_by_name: createdByName ?? null })
     .select('id')
     .single()
 

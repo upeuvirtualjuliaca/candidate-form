@@ -154,7 +154,7 @@ watch(() => route.path, syncOpenGroups)
 const campaignStore = useCampaignStore()
 
 function todayIso(): string {
-  return new Date().toISOString().split('T')[0]
+  return new Date().toISOString().slice(0, 10)
 }
 
 const campaignStatus = computed(() => {

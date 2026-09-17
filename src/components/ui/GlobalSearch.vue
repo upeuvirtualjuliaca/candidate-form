@@ -5,8 +5,8 @@ import { searchStudents, searchLibre, createCandidateFromStudent, getCandidateMa
 import { searchTeachers, createCandidateFromTeacher, getCandidateMapForTeachers } from '@/modules/teachers/services/teachers.service'
 import { useToastStore } from '@/stores/toast'
 import { usePermissions } from '@/composables/usePermissions'
-import { supabase } from '@/core/supabase'
 import { useCampaignStore } from '@/modules/campaigns/store/campaign.store'
+import { useAuthStore } from '@/modules/auth/store/auth.store'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -182,20 +182,13 @@ async function goToFicha(r: SearchResult, closeDropdown = true) {
     if (existingCandidateId.value) {
       candidateId = existingCandidateId.value
     } else if (r.type === 'teacher') {
-      const res = await createCandidateFromTeacher(r.id, campaignStore.selected?.id ?? null)
+      const res = await createCandidateFromTeacher(r.id, campaignStore.selected?.id ?? null, currentUserName.value)
       candidateId = res.id
       isNew = !res.existed
     } else {
-      const res = await createCandidateFromStudent(r.id, campaignStore.selected?.id ?? null)
+      const res = await createCandidateFromStudent(r.id, campaignStore.selected?.id ?? null, currentUserName.value)
       candidateId = res.id
       isNew = !res.existed
-    }
-    // Guardar nombre del creador sin bloquear la navegación
-    if (isNew && currentUserName.value) {
-      supabase.from('candidates')
-        .update({ created_by_name: currentUserName.value })
-        .eq('id', candidateId)
-        .then(() => { /* silencioso */ })
     }
     if (closeDropdown) closeSearch()
     closeModal()
@@ -260,22 +253,11 @@ function handleGlobal(e: KeyboardEvent) {
   }
 }
 
-const currentUserName = ref<string | null>(null)
+const { currentUserName } = useAuthStore()
 
-onMounted(async () => {
+onMounted(() => {
   document.addEventListener('mousedown', handleOutside)
   document.addEventListener('keydown', handleGlobal)
-  try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('full_name, email')
-        .eq('id', user.id)
-        .maybeSingle()
-      currentUserName.value = profile?.full_name ?? profile?.email ?? user.email ?? null
-    }
-  } catch { /* ignorar */ }
 })
 onBeforeUnmount(() => {
   document.removeEventListener('mousedown', handleOutside)
