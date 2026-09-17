@@ -16,7 +16,7 @@ function closeSidebar() {
 </script>
 
 <template>
-  <div class="flex h-screen bg-gray-50 overflow-hidden">
+  <div class="flex h-dvh bg-gray-50 overflow-hidden">
     <!-- Sidebar -->
     <AppSidebar :open="sidebarOpen" @close="closeSidebar" />
 

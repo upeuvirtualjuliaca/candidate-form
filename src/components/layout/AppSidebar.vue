@@ -336,7 +336,7 @@ function formatDate(iso: string): string {
 
     <!-- Footer -->
     <div class="px-5 py-3 border-t border-white/10 shrink-0 flex items-center justify-center">
-      <img :src="iglesiaLogo" alt="Iglesia Adventista" class="w-28 h-28 object-contain opacity-30" />
+      <img :src="iglesiaLogo" alt="Iglesia Adventista" class="w-16 h-16 object-contain opacity-30" />
     </div>
   </aside>
 </template>

@@ -6,7 +6,11 @@
   --color-tertiary: #fdc710;
 }
 
-html,
+html {
+  height: 100dvh;
+  overflow: hidden;
+}
+
 body,
 #app {
   height: 100%;

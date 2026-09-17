@@ -925,14 +925,14 @@ watch(activeTab, (tab) => {
                 <template v-for="p in listPages()" :key="String(p)">
                   <span
                     v-if="p === '...'"
-                    class="w-10 h-10 flex items-center justify-center text-gray-400 text-sm"
+                    class="hidden sm:flex w-10 h-10 items-center justify-center text-gray-400 text-sm"
                     >…</span
                   >
                   <button
                     v-else
                     type="button"
                     @click="listPage = p as number"
-                    class="w-10 h-10 flex items-center justify-center rounded-xl text-sm font-medium transition-colors"
+                    class="hidden sm:flex w-10 h-10 items-center justify-center rounded-xl text-sm font-medium transition-colors"
                     :class="
                       listPage === p
                         ? 'bg-[#04395a] text-white'
@@ -1472,14 +1472,14 @@ watch(activeTab, (tab) => {
                 <template v-for="p in draftsPages()" :key="String(p)">
                   <span
                     v-if="p === '...'"
-                    class="w-10 h-10 flex items-center justify-center text-gray-400 text-sm"
+                    class="hidden sm:flex w-10 h-10 items-center justify-center text-gray-400 text-sm"
                     >…</span
                   >
                   <button
                     v-else
                     type="button"
                     @click="draftsPage = p as number"
-                    class="w-10 h-10 flex items-center justify-center rounded-xl text-sm font-medium transition-colors"
+                    class="hidden sm:flex w-10 h-10 items-center justify-center rounded-xl text-sm font-medium transition-colors"
                     :class="
                       draftsPage === p
                         ? 'bg-[#04395a] text-white'
@@ -1711,14 +1711,14 @@ watch(activeTab, (tab) => {
                 <template v-for="p in completedPages()" :key="String(p)">
                   <span
                     v-if="p === '...'"
-                    class="w-10 h-10 flex items-center justify-center text-gray-400 text-sm"
+                    class="hidden sm:flex w-10 h-10 items-center justify-center text-gray-400 text-sm"
                     >…</span
                   >
                   <button
                     v-else
                     type="button"
                     @click="completedPage = p as number"
-                    class="w-10 h-10 flex items-center justify-center rounded-xl text-sm font-medium transition-colors"
+                    class="hidden sm:flex w-10 h-10 items-center justify-center rounded-xl text-sm font-medium transition-colors"
                     :class="
                       completedPage === p
                         ? 'bg-[#04395a] text-white'
