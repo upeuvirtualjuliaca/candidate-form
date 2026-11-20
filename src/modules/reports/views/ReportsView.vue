@@ -16,6 +16,7 @@ import {
 import { Bar } from 'vue-chartjs'
 import * as XLSX from 'xlsx'
 import jsPDF from 'jspdf'
+import logoUrl from '@/modules/admin/assets/logo_iglesia_circular_blanco.png'
 import Tabs, { type Tab } from '@/components/ui/Tabs.vue'
 import { supabase } from '@/core/supabase'
 
@@ -246,22 +247,97 @@ function exportExcel() {
   XLSX.writeFile(wb, `reporte_bautismo_${new Date().toISOString().slice(0, 10)}.xlsx`)
 }
 
-function exportPdf() {
+async function exportPdf() {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const PW = 277 // printable width (297 - 2*10 margins)
-  const ML = 10 // margin left
-  const cols = ['#', 'Tipo', 'Nombre', 'DNI/Código', 'Teléfono', 'Sede', 'Facultad', 'EP', 'Estado']
-  const colW = [8, 16, 50, 24, 24, 28, 40, 40, 22] // mm, sums ~252, rest for padding
-  const ROW_H = 6
-  const HEAD_H = 7
+  const PAGE_W = 297
+  const PAGE_H = 210
+  const ML = 10
+  const MR = 10
+  const PW = PAGE_W - ML - MR // 277
 
-  // ── Header ──
-  doc.setFontSize(13)
-  doc.setTextColor(4, 57, 90)
-  doc.text('Reporte de Bautismo — UPEU', ML, 12)
+  const showCampaignCol = !filterCampaignId.value
+  const cols = showCampaignCol
+    ? ['#', 'Tipo', 'Nombre', 'DNI/Código', 'Teléfono', 'Sede', 'Facultad', 'EP', 'Campaña', 'Fecha', 'Estado']
+    : ['#', 'Tipo', 'Nombre', 'DNI/Código', 'Teléfono', 'Sede', 'Facultad', 'EP', 'Fecha', 'Estado']
+  const colW = showCampaignCol
+    ? [8, 16, 48, 24, 22, 26, 30, 28, 34, 22, 19] // 11 cols — suma = 277
+    : [8, 16, 56, 26, 24, 28, 40, 38, 22, 19]      // 10 cols — suma = 277
+  const ROW_H = 7
+  const HEAD_H = 8
 
+  const campName = (id: string | null) =>
+    allCampaigns.value.find((c) => c.id === id)?.name ?? '—'
+
+  // ── Cargar logo ──
+  const LOGO_SIZE = 20
+  const img = new Image()
+  img.src = logoUrl
+  await new Promise<void>((resolve) => { img.onload = () => resolve() })
+
+  // ══════════════════════════════════════════════════
+  // CABECERA — banda principal azul oscuro
+  // ══════════════════════════════════════════════════
+  const HDR_H = 26
+  doc.setFillColor(4, 57, 90)
+  doc.rect(0, 0, PAGE_W, HDR_H, 'F')
+
+  // Franja de acento celeste en la parte baja de la cabecera
+  doc.setFillColor(6, 138, 184)
+  doc.rect(0, HDR_H, PAGE_W, 2, 'F')
+
+  // Logo centrado verticalmente en la banda
+  const logoY = (HDR_H - LOGO_SIZE) / 2
+  doc.addImage(img, 'PNG', ML, logoY, LOGO_SIZE, LOGO_SIZE)
+
+  // Línea vertical separadora junto al logo
+  doc.setDrawColor(6, 138, 184)
+  doc.setLineWidth(0.5)
+  doc.line(ML + LOGO_SIZE + 5, 4, ML + LOGO_SIZE + 5, HDR_H - 4)
+
+  // Bloque de texto a la derecha del separador
+  const TX = ML + LOGO_SIZE + 10
+
+  // Título principal
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(15)
+  doc.setTextColor(255, 255, 255)
+  doc.text('Reporte de Bautismo', TX, 11)
+
+  // Nombre de la iglesia
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(9)
+  doc.setTextColor(160, 210, 235)
+  doc.text('Iglesia Universitaria Villa Chullunquiani.', TX, 18)
+
+  // Institución
   doc.setFontSize(7.5)
-  doc.setTextColor(100, 100, 100)
+  doc.setTextColor(120, 175, 210)
+  doc.text('UPeU — Sistema de Registro de Bautismos ', TX, 23.5)
+
+  // Fecha generado (derecha, alineado)
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7.5)
+  doc.setTextColor(160, 210, 235)
+  doc.text(`Generado: ${new Date().toLocaleDateString('es-PE')}`, ML + PW, 11, { align: 'right' })
+
+  // ══════════════════════════════════════════════════
+  // FRANJA DE FILTROS Y ESTADÍSTICAS
+  // ══════════════════════════════════════════════════
+  const INFO_Y = HDR_H + 2
+  const INFO_H = 11
+
+  doc.setFillColor(236, 244, 250)
+  doc.rect(ML, INFO_Y, PW, INFO_H, 'F')
+  doc.setDrawColor(190, 220, 240)
+  doc.setLineWidth(0.3)
+  doc.rect(ML, INFO_Y, PW, INFO_H)
+
+  // Separador vertical entre filtros y estadísticas
+  const SEP_X = ML + PW * 0.68
+  doc.setDrawColor(190, 220, 240)
+  doc.line(SEP_X, INFO_Y + 1.5, SEP_X, INFO_Y + INFO_H - 1.5)
+
+  // — Filtros (izquierda) —
   const filters: string[] = []
   if (filterCampaignId.value) {
     const camp = allCampaigns.value.find((c) => c.id === filterCampaignId.value)
@@ -278,43 +354,89 @@ function exportPdf() {
   if (filterCampus.value) filters.push(`Campus: ${filterCampus.value}`)
   if (filterFaculty.value) filters.push(`Facultad: ${filterFaculty.value}`)
   if (filterProgram.value) filters.push(`EP: ${filterProgram.value}`)
-  doc.text(filters.length ? filters.join('   ·   ') : 'Sin filtros aplicados', ML, 18)
-  doc.text(
-    `Total: ${bTotal.value}   Bautizados: ${bCompleted.value}   Pendientes: ${bDraft.value}   Generado: ${new Date().toLocaleDateString('es-PE')}`,
-    ML,
-    23,
-  )
 
-  // ── Table header ──
-  let y = 28
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(6.5)
+  doc.setTextColor(4, 57, 90)
+  doc.text('FILTROS:', ML + 3, INFO_Y + 5)
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7)
+  doc.setTextColor(50, 80, 100)
+  const filterText = filters.length ? filters.join('  ·  ') : 'Todas las campañas · Todos los registros'
+  const maxFilterW = SEP_X - ML - 22
+  const filterLines = doc.splitTextToSize(filterText, maxFilterW)
+  doc.text(filterLines[0] ?? filterText, ML + 22, INFO_Y + 5)
+  if (filterLines[1]) doc.text(filterLines[1], ML + 22, INFO_Y + 9)
+
+  // — Estadísticas (derecha) —
+  const statsX = SEP_X + 4
+  const statItems = [
+    { label: 'Total', value: String(bTotal.value), color: [4, 57, 90] as [number, number, number] },
+    { label: 'Bautizados', value: String(bCompleted.value), color: [16, 115, 70] as [number, number, number] },
+    { label: 'Pendientes', value: String(bDraft.value), color: [146, 100, 10] as [number, number, number] },
+  ]
+  let sx = statsX
+  for (const item of statItems) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(...item.color)
+    doc.text(item.value, sx, INFO_Y + 6.5)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(6)
+    doc.setTextColor(100, 120, 140)
+    doc.text(item.label, sx, INFO_Y + 9.5)
+    sx += 22
+  }
+
+  // ══════════════════════════════════════════════════
+  // TABLA — encabezado
+  // ══════════════════════════════════════════════════
+  let y = INFO_Y + INFO_H + 2
+
   doc.setFillColor(4, 57, 90)
   doc.rect(ML, y, PW, HEAD_H, 'F')
+  // Franja de acento celeste bajo el encabezado (mismo estilo que el header principal)
+  doc.setFillColor(6, 138, 184)
+  doc.rect(ML, y + HEAD_H, PW, 1.5, 'F')
   doc.setFontSize(7)
   doc.setTextColor(255, 255, 255)
   doc.setFont('helvetica', 'bold')
   let x = ML + 1.5
   cols.forEach((col, i) => {
-    doc.text(col, x, y + HEAD_H - 2)
+    doc.text(col, x, y + HEAD_H - 2.5)
     x += colW[i]!
   })
-  y += HEAD_H
+  y += HEAD_H + 1.5 // incluye la franja de acento
 
-  // ── Table rows ──
+  // ── Filas ──
   doc.setFont('helvetica', 'normal')
-  const rows = tableRows()
-  rows.forEach((row, idx) => {
-    if (y + ROW_H > 200) {
+  baptismFiltered.value.forEach((r, idx) => {
+    if (y + ROW_H > PAGE_H - 10) {
       doc.addPage()
       y = 15
     }
-    // alternate row bg
     if (idx % 2 === 0) {
       doc.setFillColor(245, 247, 250)
       doc.rect(ML, y, PW, ROW_H, 'F')
     }
     doc.setTextColor(40, 40, 40)
     doc.setFontSize(6.5)
-    const vals = Object.values(row).slice(0, 9) as string[] // exclude Fecha from PDF columns
+
+    const baseVals: string[] = [
+      String(idx + 1),
+      rowType(r),
+      rowName(r),
+      rowDni(r),
+      rowPhone(r),
+      rowCampus(r) || '—',
+      rowFaculty(r) || '—',
+      rowProgram(r) || '—',
+    ]
+    const vals = showCampaignCol
+      ? [...baseVals, campName(r.campaign_id), fmtDate(rowDate(r)), r.status === 'completed' ? 'Bautizado' : 'Pendiente']
+      : [...baseVals, fmtDate(rowDate(r)), r.status === 'completed' ? 'Bautizado' : 'Pendiente']
+
     let cx = ML + 1.5
     vals.forEach((val, i) => {
       const maxW = (colW[i] ?? 20) - 2
@@ -322,12 +444,23 @@ function exportPdf() {
       doc.text(txt, cx, y + ROW_H - 1.8)
       cx += colW[i]!
     })
-    // bottom border
-    doc.setDrawColor(230, 230, 230)
+    doc.setDrawColor(220, 228, 235)
     doc.setLineWidth(0.1)
     doc.line(ML, y + ROW_H, ML + PW, y + ROW_H)
     y += ROW_H
   })
+
+  // ══════════════════════════════════════════════════
+  // NUMERACIÓN DE PÁGINAS
+  // ══════════════════════════════════════════════════
+  const totalPages = doc.getNumberOfPages()
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(160, 160, 160)
+    doc.text(`Página ${p} de ${totalPages}`, ML + PW, PAGE_H - 4, { align: 'right' })
+  }
 
   doc.save(`reporte_bautismo_${new Date().toISOString().slice(0, 10)}.pdf`)
 }
